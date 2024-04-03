@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "mlvu-project"
+version = "0.1.0"
+description = "MLVU Project in SNU 2024 Spring"
+authors = ["GoGiants1 <chooi221@snu.ac.kr>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+diffusers = "^0.27.2"
+accelerate = "^0.28.0"
+transformers = "^4.39.3"
+einops = "^0.7.0"
+kornia = "^0.7.2"
+gradio = "^4.25.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.3.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
