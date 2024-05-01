@@ -8,8 +8,8 @@ SNU 2024-1 MLVU Project
 ## Conventions
 
 ### Active Branches
-- `main`: 최종적인 결과물 저장하는 브랜치
-- `dev` (default): 개발용 중간 브랜치(여러 기능들 합치는 브랜치)
+- `main`(default 브랜치): 최종적인 결과물 저장하는 브랜치
+- `dev`: 개발용 중간 브랜치(여러 기능들 합치는 브랜치)
 - `feature/{description}`: 새로운 기능이 추가되는 경우에 사용
 - `refactor/{description}`: 기능 변경 없이 코드 리팩토링만을 하는 경우에 사용
 - `fix/{description}`: `dev` 브랜치로 반영하는 사소한 오류 수정 시에 사용
