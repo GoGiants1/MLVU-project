@@ -25,7 +25,6 @@ SNU 2024-1 MLVU Project
 
 ```shell
 # Check code styles using ruff
-ruff . --fix
 ruff check --fix
 ```
 등의 명령어를 사용해보시면 됩니다.
