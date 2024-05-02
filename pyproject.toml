@@ -16,8 +16,8 @@ einops = "^0.7.0"
 kornia = "^0.7.2"
 gradio = "^4.25.0"
 torch = [
-    {version = "2.2.2", source="torch-cuda118", markers = "sys_platform == 'linux'"},
-    {version = "2.2.2"}
+    {version = "2.3.0", source="torch-cuda118", markers = "sys_platform == 'linux'"},
+    {version = "2.3.0"}
 ]
 torchaudio = [
     { version = "2.3.0", source="torch-cuda118", markers = "sys_platform == 'linux'"},
