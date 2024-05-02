@@ -17,24 +17,29 @@ kornia = "^0.7.2"
 gradio = "^4.25.0"
 torch = [
     {version = "2.3.0", source="torch-cuda118", markers = "sys_platform == 'linux'"},
-    {version = "2.3.0"}
+    {version = "2.3.0", source="pypi"}
 ]
 torchaudio = [
     { version = "2.3.0", source="torch-cuda118", markers = "sys_platform == 'linux'"},
-    {version = "2.3.0"}
+    {version = "2.3.0", source="pypi"}
 ]
 torchvision = [
     {version = "0.18.0", source="torch-cuda118", markers = "sys_platform == 'linux'"},
-    {version = "0.18.0"}    
+    {version = "0.18.0", source="pypi"}    
 ]
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.3.5"
 
 [[tool.poetry.source]]
+name = "pypi"
+priority = "primary"
+
+[[tool.poetry.source]]
 name = "torch-cuda118"
 url = "https://download.pytorch.org/whl/cu118"
 priority = "explicit"
+
 
 [build-system]
 requires = ["poetry-core"]
