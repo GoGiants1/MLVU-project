@@ -17,15 +17,15 @@ kornia = "^0.7.2"
 gradio = "^4.25.0"
 torch = [
     {version = "2.3.0", source="torch-cuda118", markers = "sys_platform == 'linux'"},
-    {version = "2.3.0", source="pypi"}
+    {version = "2.3.0", source="pypi", markers = "sys_platform != 'linux'"}
 ]
 torchaudio = [
     { version = "2.3.0", source="torch-cuda118", markers = "sys_platform == 'linux'"},
-    {version = "2.3.0", source="pypi"}
+    {version = "2.3.0", source="pypi", markers = "sys_platform != 'linux'"}
 ]
 torchvision = [
     {version = "0.18.0", source="torch-cuda118", markers = "sys_platform == 'linux'"},
-    {version = "0.18.0", source="pypi"}    
+    {version = "0.18.0", source="pypi", markers = "sys_platform != 'linux'"}    
 ]
 
 [tool.poetry.group.dev.dependencies]
