@@ -11,8 +11,8 @@ from PIL import Image
 from shapely.geometry import Polygon
 from tqdm import tqdm
 
-from hi_sam.models.build import model_registry
-from hi_sam.models.predictor import SamPredictor
+from models.build import model_registry
+from models.predictor import SamPredictor
 
 
 warnings.filterwarnings("ignore")
@@ -50,6 +50,12 @@ def get_args_parser():
         action="store_true",
         help="If False, only text stroke segmentation.",
     )
+    parser.add_argument(
+        "--model_name",
+        type = str,
+        required = True,
+        help= "identify output file as model name"
+    )
 
     parser.add_argument("--input_size", default=[1024, 1024], type=list)
     parser.add_argument("--patch_mode", action="store_true")
@@ -69,14 +75,14 @@ def get_args_parser():
 
 
 def patchify(image: np.array, patch_size: int = 256):
-    h, w = image.shape[:2]
+    h, w = image.shape[:2] #ignore channel
     patch_list = []
     h_num, w_num = h // patch_size, w // patch_size
-    h_remain, w_remain = h % patch_size, w % patch_size
+    h_remain, w_remain = h % patch_size, w % patch_size 
     row, col = h_num + int(h_remain > 0), w_num + int(w_remain > 0)
     h_slices = [[r * patch_size, (r + 1) * patch_size] for r in range(h_num)]
     if h_remain:
-        h_slices = h_slices + [[h - h_remain, h]]
+        h_slices = h_slices + [[h - h_remain, h]] 
     h_slices = np.tile(h_slices, (1, col)).reshape(-1, 2).tolist()
     w_slices = [[i * patch_size, (i + 1) * patch_size] for i in range(w_num)]
     if w_remain:
@@ -92,11 +98,12 @@ def patchify(image: np.array, patch_size: int = 256):
                 :,
             ]
         )
-    return patch_list, row, col
+    return patch_list, row, col 
 
 
 def unpatchify(patches, row, col):
     # return np.array
+    # concatenate patches
     whole = [
         np.concatenate(patches[r * col : (r + 1) * col], axis=1) for r in range(row)
     ]
@@ -163,8 +170,8 @@ def show_mask(mask, ax, random_color=False, color=None):
             else np.array([30 / 255, 144 / 255, 255 / 255, 0.5])
         )
     h, w = mask.shape[-2:]
-    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-    ax.imshow(mask_image)
+    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1) 
+    ax.imshow(mask_image) 
 
 
 def show_res(masks, scores, filename, image):
@@ -255,14 +262,14 @@ if __name__ == "__main__":
     if os.path.isdir(args.input[0]):
         args.input = [
             os.path.join(args.input[0], fname) for fname in os.listdir(args.input[0])
-        ]
+        ] #list of every image file path on args.input[0] directory.
     elif len(args.input) == 1:
         args.input = glob.glob(os.path.expanduser(args.input[0]))
         assert args.input, "The input path(s) was not found"
     for path in tqdm(args.input, disable=not args.output):
         if os.path.isdir(args.output):
             assert os.path.isdir(args.output), args.output
-            img_name = os.path.basename(path).split(".")[0] + ".png"
+            img_name = os.path.basename(path).split(".")[0] +"_"+args.model_name+ ".png"
             out_filename = os.path.join(args.output, img_name)
         else:
             assert len(args.input) == 1
