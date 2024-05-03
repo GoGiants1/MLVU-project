@@ -4,10 +4,10 @@
 
 ## 명령어
 
-python run_hisam.py --checkpoint pretrained_checkpoint/sam_tss_l_hiertext.pth --model-type vit_l --input input_image --output output_image/ --model_name sam_tss\n
-sam_tss 모델 사용하는 명령어\n
-python demo_hisam.py --checkpoint pretrained_checkpoint/sam_tss_l_textseg.pth --model-type vit_l --input demo/test.jpg --output demo/\n
-hi-SAM 모델 사용하는 명령어
+- python run_hisam.py --checkpoint pretrained_checkpoint/sam_tss_l_hiertext.pth --model-type vit_l --input input_image --output output_image/ --model_name sam_tss
+- sam_tss 모델 사용하는 명령어\n
+- python demo_hisam.py --checkpoint pretrained_checkpoint/sam_tss_l_textseg.pth --model-type vit_l --input demo/test.jpg --output demo/\n
+- hi-SAM 모델 사용하는 명령어
 
 ## TODO
 - cuda GPU 할당 efficient하게 하기
