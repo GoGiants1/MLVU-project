@@ -7,12 +7,11 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pyclipper
+from models.build import model_registry
+from models.predictor import SamPredictor
 from PIL import Image
 from shapely.geometry import Polygon
 from tqdm import tqdm
-
-from models.build import model_registry
-from models.predictor import SamPredictor
 
 
 warnings.filterwarnings("ignore")
@@ -78,11 +77,11 @@ def patchify(image: np.array, patch_size: int = 256):
     h, w = image.shape[:2] #ignore channel
     patch_list = []
     h_num, w_num = h // patch_size, w // patch_size
-    h_remain, w_remain = h % patch_size, w % patch_size 
+    h_remain, w_remain = h % patch_size, w % patch_size
     row, col = h_num + int(h_remain > 0), w_num + int(w_remain > 0)
     h_slices = [[r * patch_size, (r + 1) * patch_size] for r in range(h_num)]
     if h_remain:
-        h_slices = h_slices + [[h - h_remain, h]] 
+        h_slices = h_slices + [[h - h_remain, h]]
     h_slices = np.tile(h_slices, (1, col)).reshape(-1, 2).tolist()
     w_slices = [[i * patch_size, (i + 1) * patch_size] for i in range(w_num)]
     if w_remain:
@@ -98,7 +97,7 @@ def patchify(image: np.array, patch_size: int = 256):
                 :,
             ]
         )
-    return patch_list, row, col 
+    return patch_list, row, col
 
 
 def unpatchify(patches, row, col):
@@ -170,8 +169,8 @@ def show_mask(mask, ax, random_color=False, color=None):
             else np.array([30 / 255, 144 / 255, 255 / 255, 0.5])
         )
     h, w = mask.shape[-2:]
-    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1) 
-    ax.imshow(mask_image) 
+    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+    ax.imshow(mask_image)
 
 
 def show_res(masks, scores, filename, image):
