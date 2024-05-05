@@ -109,33 +109,65 @@ from typing import List
 @dataclass
 class Args:
     # input: List[str] = field(metadata={"help": "Path to the input image"})
-    checkpoint: str = field(metadata={"help": "The path to the SAM checkpoint to use for mask generation."})
-    output: str = field(default="./demo", metadata={"help": "A file or directory to save output visualizations."})
-    model_type: str = field(default="vit_l", metadata={"help": "The type of model to load, in ['vit_h', 'vit_l', 'vit_b']"})
-    device: str = field(default="cuda", metadata={"help": "The device to run generation on."})
-    hier_det: bool = field(default=False, metadata={"help": "If False, only text stroke segmentation."})
-    input_size: List[int] = field(default_factory=lambda: [1024, 1024], metadata={"help": "The input image size."})
+    checkpoint: str = field(
+        metadata={"help": "The path to the SAM checkpoint to use for mask generation."}
+    )
+    output: str = field(
+        default="./demo",
+        metadata={"help": "A file or directory to save output visualizations."},
+    )
+    model_type: str = field(
+        default="vit_l",
+        metadata={"help": "The type of model to load, in ['vit_h', 'vit_l', 'vit_b']"},
+    )
+    device: str = field(
+        default="cuda", metadata={"help": "The device to run generation on."}
+    )
+    hier_det: bool = field(
+        default=False, metadata={"help": "If False, only text stroke segmentation."}
+    )
+    input_size: List[int] = field(
+        default_factory=lambda: [1024, 1024], metadata={"help": "The input image size."}
+    )
     patch_mode: bool = field(default=False, metadata={"help": "self-prompting"})
-    attn_layers: int = field(default=1, metadata={"help": "The number of image to token cross attention layers in model_aligner"})
+    attn_layers: int = field(
+        default=1,
+        metadata={
+            "help": "The number of image to token cross attention layers in model_aligner"
+        },
+    )
     prompt_len: int = field(default=12, metadata={"help": "The number of prompt token"})
-    zero_shot: bool = field(default=False, metadata={"help": "If True, use zero-shot setting."})
+    zero_shot: bool = field(
+        default=False, metadata={"help": "If True, use zero-shot setting."}
+    )
     vis: bool = field(default=True, metadata={"help": "If True, save visualization."})
-    dataset: str = field(default="totaltext", metadata={"help": "Trained dataset for text detection"})
+    dataset: str = field(
+        default="totaltext", metadata={"help": "Trained dataset for text detection"}
+    )
     layout_thresh: float = field(default=0.5)
 
 
-args = Args(model_type="vit_h", checkpoint="pretrained_checkpoint/hi_sam_h.pth", dataset="ctw1500", 
-            output="./demo_line_detect_w_zeroshot", hier_det=True, vis=True, zero_shot=True, layout_thresh=0.6,
-            input_size=[512, 512], patch_mode=True, attn_layers=1, prompt_len=12, device="cuda")
-
-
+args = Args(
+    model_type="vit_h",
+    checkpoint="pretrained_checkpoint/hi_sam_h.pth",
+    dataset="ctw1500",
+    output="./demo_line_detect_w_zeroshot",
+    hier_det=True,
+    vis=True,
+    zero_shot=True,
+    layout_thresh=0.6,
+    input_size=[512, 512],
+    patch_mode=True,
+    attn_layers=1,
+    prompt_len=12,
+    device="cuda",
+)
 
 
 import random
 
 from diffusers.utils import load_image
 from hi_sam.models.auto_mask_generator import AutoMaskGenerator
-
 
 
 def run_text_detection():
@@ -152,7 +184,7 @@ def run_text_detection():
     print("Loaded model")
     amg = AutoMaskGenerator(model)
 
-    if args.dataset == 'totaltext':
+    if args.dataset == "totaltext":
         if args.zero_shot:
             fg_points_num = 50  # assemble text kernel
             score_thresh = 0.3
@@ -160,7 +192,7 @@ def run_text_detection():
         else:
             fg_points_num = 500
             score_thresh = 0.95
-    elif args.dataset == 'ctw1500':
+    elif args.dataset == "ctw1500":
         if args.zero_shot:
             fg_points_num = 100
             score_thresh = 0.6
@@ -181,7 +213,7 @@ def run_text_detection():
 
         if not os.path.isdir(args.output):
             os.makedirs(args.output, exist_ok=True)
-        
+
         assert os.path.isdir(args.output), args.output
         img_name = f"{i}.png"
         out_filename = os.path.join(args.output, img_name)
@@ -193,10 +225,10 @@ def run_text_detection():
         amg.set_image(image_arr)
         masks, scores = amg.predict_text_detection(
             from_low_res=False,
-            fg_points_num=fg_points_num,
-            batch_points_num=min(fg_points_num, 100),
-            score_thresh=score_thresh,
-            nms_thresh=score_thresh,
+            fg_points_num=1500,
+            batch_points_num=min(1500, 100),
+            score_thresh=0.5,
+            nms_thresh=0.5,
             zero_shot=args.zero_shot,
             # dataset=args.dataset
         )
@@ -204,10 +236,11 @@ def run_text_detection():
         # print(scores)
 
         if masks is not None:
-            print('Inference done. Start plotting masks.')
+            print("Inference done. Start plotting masks.")
             show_masks(masks, out_filename, image)
         else:
-            print('no prediction')
+            print("no prediction")
+
 
 if __name__ == "__main__":
     run_text_detection()
