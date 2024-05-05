@@ -10,7 +10,10 @@ Hisam_H="https://huggingface.co/GoGiants1/Hi-SAM/resolve/main/hi_sam_h.pth"
 Hisam_L="https://huggingface.co/GoGiants1/Hi-SAM/resolve/main/hi_sam_l.pth"
 Hisam_B="https://huggingface.co/GoGiants1/Hi-SAM/resolve/main/hi_sam_b.pth"
 
-list=(SAM_H SAM_L SAM_B Hisam_H Hisam_L Hisam_B)
+detection_ctw1500="https://huggingface.co/GoGiants1/Hi-SAM/resolve/main/line_detection_ctw1500.pth"
+detection_totaltext="https://huggingface.co/GoGiants1/Hi-SAM/resolve/main/word_detection_totaltext.pth"
+
+list=(SAM_H SAM_L SAM_B Hisam_H Hisam_L Hisam_B detection_ctw1500 detection_totaltext)
 
 # Define the destination directory to save the checkpoint
 destination_dir="pretrained_checkpoint"
@@ -26,6 +29,5 @@ for i in "${list[@]}"
 do
     wget --content-disposition "${!i}"
 done
-
 
 echo "Model checkpoint downloaded successfully!"
