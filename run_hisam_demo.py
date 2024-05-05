@@ -121,10 +121,11 @@ class Args:
     zero_shot: bool = field(default=False, metadata={"help": "If True, use zero-shot setting."})
     vis: bool = field(default=True, metadata={"help": "If True, save visualization."})
     dataset: str = field(default="totaltext", metadata={"help": "Trained dataset for text detection"})
+    layout_thresh: float = field(default=0.5)
 
 
-args = Args(model_type="vit_h", checkpoint="pretrained_checkpoint/line_detection_ctw1500.pth", dataset="ctw1500", 
-            output="./demo_line_detect_w_zeroshot", hier_det=True, vis=True, zero_shot=True,
+args = Args(model_type="vit_h", checkpoint="pretrained_checkpoint/hi_sam_h.pth", dataset="ctw1500", 
+            output="./demo_line_detect_w_zeroshot", hier_det=True, vis=True, zero_shot=True, layout_thresh=0.6,
             input_size=[512, 512], patch_mode=True, attn_layers=1, prompt_len=12, device="cuda")
 
 
@@ -137,7 +138,7 @@ from hi_sam.models.auto_mask_generator import AutoMaskGenerator
 
 
 
-def run():
+def run_text_detection():
     model = model_registry[args.model_type](args)
 
     seed = 42
@@ -197,7 +198,7 @@ def run():
             score_thresh=score_thresh,
             nms_thresh=score_thresh,
             zero_shot=args.zero_shot,
-            dataset=args.dataset
+            # dataset=args.dataset
         )
         # print(masks.shape)
         # print(scores)
@@ -209,4 +210,4 @@ def run():
             print('no prediction')
 
 if __name__ == "__main__":
-    run()
+    run_text_detection()
