@@ -1,0 +1,1 @@
+python demo_hisam.py --checkpoint pretrained_checkpoint/sam_tss_h_textseg.pth --model-type vit_h --input scene1.jpg --output outs/

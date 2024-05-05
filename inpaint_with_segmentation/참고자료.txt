@@ -1,0 +1,13 @@
+1.scene text 있는 이미지에서 scene text 제거
+
+2.scene text 없는 이미지에서 scene text 생성 
+
+3.scene text 있는 이미지에서 scene text는 그대로 유지하고 배경만 변경 
+
+4.scene text 있는 이미지에서 scene text의 내용 및 폰트나 모양 관련 스타일 변경 (가장 어려움)
+
+5.scene text 있는 이미지에서 scene text의 색깔 변경 
+
+==> 위 1-5중 1, 3, 5에 적합 
+
+https://huggingface.co/lllyasviel/control_v11p_sd15_inpaint
