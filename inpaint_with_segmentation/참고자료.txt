@@ -15,6 +15,7 @@ https://huggingface.co/lllyasviel/control_v11p_sd15_inpaint
 https://huggingface.co/lllyasviel/sd-controlnet-seg
 https://github.com/mikonvergence/ControlNetInpaint?tab=readme-ov-file
 https://arxiv.org/html/2402.13404v1
+https://github.com/advimman/lama 
 
 
 Img to img (one/zero shot)
