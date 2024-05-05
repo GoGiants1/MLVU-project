@@ -230,7 +230,7 @@ def run_text_detection():
             score_thresh=0.5,
             nms_thresh=0.5,
             zero_shot=args.zero_shot,
-            # dataset=args.dataset
+            dataset=args.dataset,
         )
         # print(masks.shape)
         # print(scores)
