@@ -10,4 +10,13 @@
 
 ==> 위 1-5중 1, 3, 5에 적합 
 
+ControlNet Inpaint
 https://huggingface.co/lllyasviel/control_v11p_sd15_inpaint
+https://huggingface.co/lllyasviel/sd-controlnet-seg
+https://github.com/mikonvergence/ControlNetInpaint?tab=readme-ov-file
+https://arxiv.org/html/2402.13404v1
+
+
+Img to img (one/zero shot)
+https://dl.acm.org/doi/abs/10.1145/3588432.3591513
+https://arxiv.org/abs/2307.14352
