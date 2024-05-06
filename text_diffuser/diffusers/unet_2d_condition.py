@@ -18,18 +18,10 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
-from ...configuration_utils import ConfigMixin, register_to_config
-from ...loaders import PeftAdapterMixin, UNet2DConditionLoadersMixin
-from ...utils import (
-    USE_PEFT_BACKEND,
-    BaseOutput,
-    deprecate,
-    logging,
-    scale_lora_layers,
-    unscale_lora_layers,
-)
-from ..activations import get_activation
-from ..attention_processor import (
+from diffusers.configuration_utils import ConfigMixin, register_to_config
+from diffusers.loaders import PeftAdapterMixin, UNet2DConditionLoadersMixin
+from diffusers.models.activations import get_activation
+from diffusers.models.attention_processor import (
     ADDED_KV_ATTENTION_PROCESSORS,
     CROSS_ATTENTION_PROCESSORS,
     Attention,
@@ -37,7 +29,7 @@ from ..attention_processor import (
     AttnAddedKVProcessor,
     AttnProcessor,
 )
-from ..embeddings import (
+from diffusers.models.embeddings import (
     GaussianFourierProjection,
     GLIGENTextBoundingboxProjection,
     ImageHintTimeEmbedding,
@@ -49,11 +41,19 @@ from ..embeddings import (
     TimestepEmbedding,
     Timesteps,
 )
-from ..modeling_utils import ModelMixin
-from .unet_2d_blocks import (
+from diffusers.models.modeling_utils import ModelMixin
+from diffusers.models.unets.unet_2d_blocks import (
     get_down_block,
     get_mid_block,
     get_up_block,
+)
+from diffusers.utils import (
+    USE_PEFT_BACKEND,
+    BaseOutput,
+    deprecate,
+    logging,
+    scale_lora_layers,
+    unscale_lora_layers,
 )
 
 
