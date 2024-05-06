@@ -36,7 +36,9 @@ from PIL import (
     ImageEnhance,
     ImageFont,
     ImageOps,
-)  # import for visualization
+)
+
+# import for visualization
 from termcolor import colored
 from torchvision import transforms
 from tqdm.auto import tqdm
