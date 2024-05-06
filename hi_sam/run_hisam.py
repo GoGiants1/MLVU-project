@@ -7,12 +7,11 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pyclipper
+from models.build import model_registry
+from models.predictor import SamPredictor
 from PIL import Image
 from shapely.geometry import Polygon
 from tqdm import tqdm
-
-from hi_sam.models.build import model_registry
-from hi_sam.models.predictor import SamPredictor
 
 
 warnings.filterwarnings("ignore")
@@ -50,6 +49,12 @@ def get_args_parser():
         action="store_true",
         help="If False, only text stroke segmentation.",
     )
+    parser.add_argument(
+        "--model_name",
+        type = str,
+        required = True,
+        help= "identify output file as model name"
+    )
 
     parser.add_argument("--input_size", default=[1024, 1024], type=list)
     parser.add_argument("--patch_mode", action="store_true")
@@ -69,7 +74,7 @@ def get_args_parser():
 
 
 def patchify(image: np.array, patch_size: int = 256):
-    h, w = image.shape[:2]
+    h, w = image.shape[:2] #ignore channel
     patch_list = []
     h_num, w_num = h // patch_size, w // patch_size
     h_remain, w_remain = h % patch_size, w % patch_size
@@ -97,6 +102,7 @@ def patchify(image: np.array, patch_size: int = 256):
 
 def unpatchify(patches, row, col):
     # return np.array
+    # concatenate patches
     whole = [
         np.concatenate(patches[r * col : (r + 1) * col], axis=1) for r in range(row)
     ]
@@ -255,14 +261,14 @@ if __name__ == "__main__":
     if os.path.isdir(args.input[0]):
         args.input = [
             os.path.join(args.input[0], fname) for fname in os.listdir(args.input[0])
-        ]
+        ] #list of every image file path on args.input[0] directory.
     elif len(args.input) == 1:
         args.input = glob.glob(os.path.expanduser(args.input[0]))
         assert args.input, "The input path(s) was not found"
     for path in tqdm(args.input, disable=not args.output):
         if os.path.isdir(args.output):
             assert os.path.isdir(args.output), args.output
-            img_name = os.path.basename(path).split(".")[0] + ".png"
+            img_name = os.path.basename(path).split(".")[0] +"_"+args.model_name+ ".png"
             out_filename = os.path.join(args.output, img_name)
         else:
             assert len(args.input) == 1
