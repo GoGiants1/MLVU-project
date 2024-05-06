@@ -30,6 +30,8 @@ ruff check --fix
 등의 명령어를 사용해보시면 됩니다.
 
 ## Dev Guidelines
+### Python 설치 관련 팁
+pyenv를 사용하셔서, 여러 버전의 파이썬을 사용하실 수 있습니다. 그리고, poetry에서는 파이썬 버전 제약을 거는 경우가 있는데, 로컬에 python 3.11이 없으시다면, pyenv 설치 후, 3.11 버전의 파이썬을 설치해주세요. 이후 global 수준에서 python 3.11을 켜주시면 됩니다. `pyenv global 3.11.x`
 
 ### Python Dependencies
 가상환경을 활성화하고 필요한 패키지를 설치합니다.
