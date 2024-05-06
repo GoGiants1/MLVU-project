@@ -11,4 +11,13 @@
 
 ## TODO
 - cuda GPU 할당 efficient하게 하기
-- Hi-SAM model 쓸때 input point 어떻게 잡아줄 것인가......
+- NMS 알고리즘 vs zero shot 최적화
+- 이미지 크기 조절해서 테스트하기
+
+
+## How to use Hi-SAM module
+[text_segmentation.py](text_segmentation.py) 파일에서 여러 함수를 구현해두었습니다. 
+1. `make_text_segmentation_args` 함수를 통해 argument를 설정합니다.
+1. `load_auto_mask_generator` 함수를 통해 모델을 불러옵니다.
+1. `run_text_detection` 함수를 통해 이미지를 입력하면 text detection을 수행합니다.
+1. GPU에서 모델을 load or unload하고 싶다면 `unload_model` 혹은 `model_to_device` 함수를 사용합니다.
