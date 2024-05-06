@@ -176,7 +176,7 @@ class UNet2DConditionModel(
     def __init__(
         self,
         sample_size: Optional[int] = None,
-        in_channels: int = 4,
+        in_channels: int = 17,
         out_channels: int = 4,
         center_input_sample: bool = False,
         flip_sin_to_cos: bool = True,
@@ -236,6 +236,21 @@ class UNet2DConditionModel(
     ):
         super().__init__()
 
+        # char embedding layer
+        self.word_embedding = nn.Embedding(128, 8)
+        # convolution layer
+        self.segmap_conv = nn.Sequential(
+            nn.Conv2d(8, 32, 3, 1, 1),
+            nn.ReLU(),
+            nn.BatchNorm2d(32),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(32, 64, 3, 1, 1),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(64, 8, 3, 1, 1),
+        )
+
         self.sample_size = sample_size
 
         if num_attention_heads is not None:
@@ -268,7 +283,7 @@ class UNet2DConditionModel(
         # input
         conv_in_padding = (conv_in_kernel - 1) // 2
         self.conv_in = nn.Conv2d(
-            in_channels,
+            in_channels,  # the input channel is modified to 17 (4+8+1+4)s
             block_out_channels[0],
             kernel_size=conv_in_kernel,
             padding=conv_in_padding,
@@ -1185,10 +1200,11 @@ class UNet2DConditionModel(
         down_intrablock_additional_residuals: Optional[Tuple[torch.Tensor]] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         return_dict: bool = True,
+        segmentation_mask: torch.Tensor = None,  # added
+        masked_feature: torch.Tensor = None,  # added
+        feature_mask: torch.Tensor = None,  # added
     ) -> Union[UNet2DConditionOutput, Tuple]:
         r"""
-        The [`UNet2DConditionModel`] forward method.
-
         Args:
             sample (`torch.FloatTensor`):
                 The noisy input tensor with the following shape `(batch, channel, height, width)`.
@@ -1224,6 +1240,13 @@ class UNet2DConditionModel(
             return_dict (`bool`, *optional*, defaults to `True`):
                 Whether or not to return a [`~models.unets.unet_2d_condition.UNet2DConditionOutput`] instead of a plain
                 tuple.
+
+            segmentation_mask (`torch.Tensor`):
+                A tensor of shape `(batch, number of segmentations ?, height, width)` representing the character-level segmentation mask.
+            masked_feature (`torch.Tensor`):
+                A masked feature tensor
+            feature_mask (`torch.Tensor`):
+                A feature mask tensor
 
         Returns:
             [`~models.unets.unet_2d_condition.UNet2DConditionOutput`] or `tuple`:
@@ -1261,6 +1284,9 @@ class UNet2DConditionModel(
             #       (keep = +0,     discard = -10000.0)
             attention_mask = (1 - attention_mask.to(sample.dtype)) * -10000.0
             attention_mask = attention_mask.unsqueeze(1)
+
+        # 0. concat all the feature together (Seg mask, masked feature.)
+        sample = torch.cat([sample, feature_mask, masked_feature], dim=1)
 
         # convert encoder_attention_mask to a bias the same way we do for attention_mask
         if encoder_attention_mask is not None:
@@ -1305,6 +1331,16 @@ class UNet2DConditionModel(
         )
 
         # 2. pre-process
+        segmentation_mask_embedding = self.word_embedding(
+            segmentation_mask.squeeze(1).long()
+        ).permute(
+            0, 3, 1, 2
+        )  # get 8-d embedding from character-level segmentation mask
+        segmentation_mask_embedding = self.segmap_conv(
+            segmentation_mask_embedding
+        )  # resize the mask using cnn to match the feature space
+        sample = torch.cat([sample, segmentation_mask_embedding], 1)
+
         sample = self.conv_in(sample)
 
         # 2.5 GLIGEN position net
