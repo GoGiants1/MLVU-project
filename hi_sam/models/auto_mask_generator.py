@@ -303,6 +303,8 @@ class AutoMaskGenerator:
         scores = scores[keep]
         word_masks = word_masks[keep]
 
+        # TODO: Optimize this part
+
         if dataset == "totaltext" and zero_shot:
             word_masks = word_masks > self.model.mask_threshold
             word_masks = (word_masks.sum(dim=0)[None, ...] > 0).type(torch.float32)
