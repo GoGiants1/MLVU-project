@@ -18,23 +18,19 @@ import cv2
 import datasets
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
-import torchsnooper
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
-from datasets import disable_caching, load_dataset
+from datasets import disable_caching
 from huggingface_hub import HfFolder, Repository, create_repo, whoami
 from model.layout_generator import get_layout_from_prompt
 from model.text_segmenter.unet import UNet
 from packaging import version
 from PIL import (
     Image,
-    ImageDraw,
     ImageEnhance,
-    ImageFont,
     ImageOps,
 )
 
@@ -56,12 +52,9 @@ import diffusers
 from diffusers import (
     AutoencoderKL,
     DDPMScheduler,
-    StableDiffusionPipeline,
     UNet2DConditionModel,
 )
-from diffusers.optimization import get_scheduler
-from diffusers.training_utils import EMAModel
-from diffusers.utils import check_min_version, deprecate
+from diffusers.utils import check_min_version
 from diffusers.utils.import_utils import is_xformers_available
 
 
@@ -354,9 +347,7 @@ def main():
             else:
                 repo_name = args.hub_model_id
             create_repo(repo_name, exist_ok=True, token=args.hub_token)
-            repo = Repository(
-                args.output_dir, clone_from=repo_name, token=args.hub_token
-            )
+            _ = Repository(args.output_dir, clone_from=repo_name, token=args.hub_token)
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:

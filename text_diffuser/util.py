@@ -7,12 +7,10 @@
 # ------------------------------------------
 
 import math
-import os
 import re
-import shutil
 import string
 import textwrap
-from typing import *
+from typing import List
 
 import cv2
 import numpy as np

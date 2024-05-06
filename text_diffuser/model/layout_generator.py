@@ -6,16 +6,11 @@
 # This file aims to predict the layout of keywords in user prompts.
 # ------------------------------------------
 
-import warnings
-
-
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 import re
+import warnings
 
 import numpy as np
 import torch
-import torch.nn as nn
 from model.layout_transformer import LayoutTransformer, TextConditioner
 from PIL import Image, ImageDraw, ImageFont
 from termcolor import colored
@@ -28,6 +23,9 @@ from util import (
     get_width,
     shrink_box,
 )
+
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 # import layout transformer
@@ -226,7 +224,7 @@ def get_layout_from_prompt(args):
             return_boxes.append([xmin, ymin, xmax, ymax])
 
     # print the location of keywords
-    print(f"index\tkeyword\tx_min\ty_min\tx_max\ty_max")
+    print("index\tkeyword\tx_min\ty_min\tx_max\ty_max")
     for index, keyword in enumerate(keywords):
         x_min = int(return_boxes[index][0] * 512)
         y_min = int(return_boxes[index][1] * 512)

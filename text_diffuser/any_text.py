@@ -1,3 +1,5 @@
+# type: ignore
+
 """
 AnyText: Multilingual Visual Text Generation And Editing
 Paper: https://arxiv.org/abs/2311.03054
@@ -5,10 +7,8 @@ Code: https://github.com/tyxsspa/AnyText
 Copyright (c) Alibaba, Inc. and its affiliates.
 """
 
+# ruff: noqa
 import os
-
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import random
 import re
 import time
@@ -35,6 +35,8 @@ from pytorch_lightning import seed_everything
 from t3_dataset import draw_glyph, draw_glyph2
 from util import check_channels, resize_image, save_images
 
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 checker = BasicTokenizer()
 BBOX_MAX_NUM = 8
