@@ -1,17 +1,19 @@
-import glob
 import os
+import random
+from dataclasses import dataclass, field
+from typing import List
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pyclipper
 import torch
-from PIL import Image
 from shapely.geometry import Polygon
 from tqdm import tqdm
 
+from diffusers.utils import load_image
+from hi_sam.models.auto_mask_generator import AutoMaskGenerator
 from hi_sam.models.build import model_registry
-from hi_sam.models.predictor import SamPredictor
 
 
 def unclip(p, unclip_ratio=2.0):
@@ -102,10 +104,6 @@ def show_masks(masks, filename, image):
     plt.close()
 
 
-from dataclasses import dataclass, field
-from typing import List
-
-
 @dataclass
 class Args:
     # input: List[str] = field(metadata={"help": "Path to the input image"})
@@ -164,12 +162,6 @@ args = Args(
 )
 
 
-import random
-
-from diffusers.utils import load_image
-from hi_sam.models.auto_mask_generator import AutoMaskGenerator
-
-
 def run_text_detection():
     model = model_registry[args.model_type](args)
 
@@ -186,19 +178,19 @@ def run_text_detection():
 
     if args.dataset == "totaltext":
         if args.zero_shot:
-            fg_points_num = 50  # assemble text kernel
-            score_thresh = 0.3
-            unclip_ratio = 1.5
+            fg_points_num = 50  # assemble text kernel # noqa: F841
+            score_thresh = 0.3  # noqa: F841
+            unclip_ratio = 1.5  # noqa: F841
         else:
             fg_points_num = 500
             score_thresh = 0.95
     elif args.dataset == "ctw1500":
         if args.zero_shot:
-            fg_points_num = 100
-            score_thresh = 0.6
+            fg_points_num = 100  # noqa: F841
+            score_thresh = 0.6  # noqa: F841
         else:
-            fg_points_num = 300
-            score_thresh = 0.7
+            fg_points_num = 300  # noqa: F841
+            score_thresh = 0.7  # noqa: F841
     else:
         raise ValueError
 
