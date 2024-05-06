@@ -29,8 +29,8 @@ from huggingface_hub import create_repo
 from huggingface_hub.utils import validate_hf_hub_args
 from torch import Tensor, nn
 
-from .. import __version__
-from ..utils import (
+from diffusers import __version__
+from diffusers.utils import (
     CONFIG_NAME,
     FLAX_WEIGHTS_NAME,
     SAFETENSORS_FILE_EXTENSION,
@@ -43,7 +43,7 @@ from ..utils import (
     is_torch_version,
     logging,
 )
-from ..utils.hub_utils import (
+from diffusers.utils.hub_utils import (
     PushToHubMixin,
     load_or_create_model_card,
     populate_model_card,
