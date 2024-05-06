@@ -378,6 +378,15 @@ def main():
         subfolder="text_encoder",
         revision=args.revision,
     )
+
+    # TODO: AnyText Ideas! -> use multi-lingual BERT
+    # from transformers import BertTokenizer, BertModel
+    # tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-cased')
+    # model = BertModel.from_pretrained("bert-base-multilingual-cased")
+    # text = "Replace me by any text you'd like."
+    # encoded_input = tokenizer(text, return_tensors='pt')
+    # output = model(**encoded_input)
+
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision
     ).cuda()
