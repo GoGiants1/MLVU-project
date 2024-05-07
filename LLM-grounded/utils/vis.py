@@ -1,9 +1,13 @@
-import matplotlib.pyplot as plt
 import math
-import utils
-from PIL import Image
+
+import matplotlib.pyplot as plt
 import numpy as np
+from PIL import Image
+
+import utils
+
 from . import parse
+
 
 save_ind = 0
 
@@ -233,7 +237,7 @@ def display(image, save_prefix="", ind=None, save_ind_in_filename=True):
     else:
         ind = f"{ind}" if ind is not None else ""
         path = f"{parse.img_dir}/{save_prefix}{ind}.png"
-    
+
     print(f"Saved to {path}")
 
     if isinstance(image, np.ndarray):

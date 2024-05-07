@@ -1,10 +1,13 @@
 # visualization-related functions are in vis
+import math
 import numbers
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
+
 import utils
+
 
 def get_token_attnv2(token_id, saved_attns, attn_key, attn_aggregation_step_start=10, input_ca_has_condition_only=False, return_np=False):
     """
@@ -12,14 +15,14 @@ def get_token_attnv2(token_id, saved_attns, attn_key, attn_aggregation_step_star
     
     moves to cpu by default
     """
-    saved_attns = saved_attns[attn_aggregation_step_start:]    
+    saved_attns = saved_attns[attn_aggregation_step_start:]
 
     saved_attns = [saved_attn[attn_key].cpu() for saved_attn in saved_attns]
-    
+
     attn = torch.stack(saved_attns, dim=0).mean(dim=0)
-    
+
     # print("attn shape", attn.shape)
-    
+
     # attn: (batch, head, spatial, text)
 
     if not input_ca_has_condition_only:
@@ -31,7 +34,7 @@ def get_token_attnv2(token_id, saved_attns, attn_key, attn_aggregation_step_star
     attn = attn.mean(dim=0)[:, token_id]
     H = W = int(math.sqrt(attn.shape[0]))
     attn = attn.reshape((H, W))
-    
+
     if return_np:
         return attn.numpy()
 
@@ -44,29 +47,29 @@ def shift_saved_attns_item(saved_attns_item, offset, guidance_attn_keys, horizon
     x_offset, y_offset = offset
     if horizontal_shift_only:
         y_offset = 0.
-    
+
     new_saved_attns_item = {}
     for k in guidance_attn_keys:
         attn_map = saved_attns_item[k]
-        
+
         attn_size = attn_map.shape[-2]
         attn_h = attn_w = int(math.sqrt(attn_size))
         # Example dimensions: [batch_size, num_heads, 8, 8, num_tokens]
         attn_map = attn_map.unflatten(2, (attn_h, attn_w))
         attn_map = utils.shift_tensor(
-            attn_map, x_offset, y_offset, 
+            attn_map, x_offset, y_offset,
             offset_normalized=True, ignore_last_dim=True
         )
         attn_map = attn_map.flatten(2, 3)
-        
+
         new_saved_attns_item[k] = attn_map
-        
+
     return new_saved_attns_item
 
 def shift_saved_attns(saved_attns, offset, guidance_attn_keys, **kwargs):
     # Iterate over timesteps
     shifted_saved_attns = [shift_saved_attns_item(saved_attns_item, offset, guidance_attn_keys, **kwargs) for saved_attns_item in saved_attns]
-    
+
     return shifted_saved_attns
 
 

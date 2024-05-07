@@ -1,10 +1,13 @@
-import requests
-from prompt import templates, stop
-from easydict import EasyDict
-from utils.cache import get_cache, add_cache
-from utils.parse import size, parse_input_with_negative, filter_boxes
-import traceback
 import time
+import traceback
+
+import requests
+from easydict import EasyDict
+from prompt import stop, templates
+
+from utils.cache import add_cache, get_cache
+from utils.parse import filter_boxes, parse_input_with_negative
+
 
 model_names = ["vicuna", "vicuna-13b", "vicuna-13b-v1.3", "vicuna-33b-v1.3", "Llama-2-7b-hf", "Llama-2-13b-hf", "Llama-2-70b-hf", "FreeWilly2", "StableBeluga2", "gpt-3.5-turbo", "gpt-3.5", "gpt-4", "text-davinci-003", "Mixtral-8x7B-Instruct-v0.1"]
 
@@ -21,12 +24,12 @@ def get_full_model_name(model):
         model = "vicuna-13b"
     elif model == "gpt-4":
         model = "gpt-4"
-        
+
     return model
 
 def get_llm_kwargs(model, template_version):
     model = get_full_model_name(model)
-        
+
     print(f"Using template: {template_version}")
 
     template = templates[template_version]
@@ -38,7 +41,7 @@ def get_llm_kwargs(model, template_version):
         headers = {}
     else:
         from utils.api_key import api_key
-        
+
         api_base = "https://api.openai.com/v1"
         max_tokens = 900
         temperature = 0.25

@@ -1,5 +1,7 @@
-import torch
 import warnings
+
+import torch
+
 
 def get_fast_schedule(origial_timesteps, fast_after_steps, fast_rate):
     if fast_after_steps >= len(origial_timesteps) - 1:

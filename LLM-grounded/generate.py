@@ -1,18 +1,22 @@
-from utils import parse, vis, cache
-from utils.llm import get_full_model_name, model_names
-from utils.parse import parse_input_with_negative, filter_boxes, show_boxes
-from tqdm import tqdm
+import argparse
+import bdb
 import os
+import time
+import traceback
+
+import generation.sdxl_refinement as sdxl
+
 # from prompt import prompt_types, get_prompts, template_versions
 import matplotlib.pyplot as plt
 import models
-import traceback
-import bdb
-import time
-import diffusers
 from models import sam
-import argparse
-import generation.sdxl_refinement as sdxl
+from tqdm import tqdm
+from utils import cache, parse, vis
+from utils.llm import get_full_model_name, model_names
+from utils.parse import filter_boxes, parse_input_with_negative, show_boxes
+
+import diffusers
+
 
 def define_parser():
     parser = argparse.ArgumentParser()
@@ -99,7 +103,7 @@ def define_parser():
 
 float_args, int_args, str_args, args = define_parser()
 
-our_models = ["lmd", "lmd_plus"]
+our_models = ["lmd_plus"]
 gligen_models = ["gligen", "lmd_plus"]
 
 # MultiDiffusion will load its own model instead of using the model loaded with `load_sd`.
@@ -134,7 +138,7 @@ if not args.dry_run:
     if args.run_model == "lmd":
         import generation.lmd as generation
     elif args.run_model == "lmd_plus":
-        import generation.lmd_plus as generation    # 생성 모델 들고오는건가?
+        import generation.lmd_plus as generation  # 생성 모델 들고오는건가?
     elif args.run_model == "sd":
         if not args.ignore_negative_prompt:
             print(
@@ -341,7 +345,7 @@ for regenerate_ind in range(args.regenerate):
                             )
                         else:
                             # Uses synthetic prompt (handles negation and additional languages better)  # 이게 뭐더라?
-                            
+
                             # 결국 여기서 이제 결과물을 생성하는 것으로 보인다.
                             output = run(
                                 spec=spec,  # spec은 prompt, gen_boxes, bg_prompt, extra_neg_prompt를 가지고 있다.

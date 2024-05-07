@@ -4,17 +4,19 @@ This is an reimplementation boxdiff baseline for reference and comparison. It is
 Credit: https://github.com/showlab/BoxDiff/blob/master/pipeline/sd_pipeline_boxdiff.py
 """
 
-import torch
-import torch.nn.functional as F
+import gc
 import math
 import warnings
-import gc
 from collections.abc import Iterable
+from typing import List
+
+import torch
+import torch.nn.functional as F
+
 import utils
+
 from . import guidance
 from .attn import GaussianSmoothing
-
-from typing import Any, Callable, Dict, List, Optional, Union, Tuple
 
 
 def _compute_max_attention_per_index(attention_maps: torch.Tensor,
@@ -149,7 +151,7 @@ def compute_ca_loss_boxdiff(saved_attn, bboxes, object_positions, guidance_attn_
 
     if ref_ca_saved_attns is not None:
         warnings.warn('Attention reference loss is enabled in boxdiff mode. The original boxdiff does not have attention reference loss.')
-        
+
         ref_loss = torch.tensor(0).float().cuda()
         ref_loss = guidance.add_ref_ca_loss_per_attn_map_to_lossv2(
             ref_loss, saved_attn=saved_attn, object_number=object_number, bboxes=bboxes, object_positions=object_positions, guidance_attn_keys=guidance_attn_keys,
