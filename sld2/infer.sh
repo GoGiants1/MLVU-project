@@ -1,0 +1,1 @@
+python SLD_demo.py --json-file demo/image_editing/data.json --input-dir demo/image_editing/src_image --output-dir edits --mode image_editing --config demo_config.ini 
