@@ -342,7 +342,7 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
         self, valid: bool, attention_op: Optional[Callable] = None
     ) -> None:
         # Recursively walk through all the children.
-        # Any children which exposes the set_use_memory_efficient_attention_xformers method
+        # Any children which exposes the set_use_memory_efficient_attention_s method
         # gets the message
         def fn_recursive_set_mem_eff(module: torch.nn.Module):
             if hasattr(module, "set_use_memory_efficient_attention_xformers"):
