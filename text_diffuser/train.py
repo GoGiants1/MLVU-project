@@ -504,7 +504,7 @@ def main():
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
-
+    
     if args.enable_xformers_memory_efficient_attention:
         if is_xformers_available():
             import xformers
@@ -550,6 +550,7 @@ def main():
                 load_model = UNet2DConditionModel.from_pretrained(
                     input_dir, subfolder="unet"
                 )
+                #register to config?
                 model.register_to_config(**load_model.config)
 
                 model.load_state_dict(load_model.state_dict())
@@ -608,52 +609,52 @@ def main():
     }
 
     # 6. Get the column names for input/target.
-    dataset_columns = dataset_name_mapping.get(args.dataset_name, None)
+    dataset_columns = dataset_name_mapping.get(args.dataset_name, None) #mario-10m
     if args.image_column is None:
         image_column = (
-            dataset_columns[0] if dataset_columns is not None else column_names[0]
+            dataset_columns[0] if dataset_columns is not None else column_names[0] #image
         )
     else:
-        image_column = args.image_column
+        image_column = args.image_column #user input
         if image_column not in column_names:
             raise ValueError(
                 f"--image_column' value '{args.image_column}' needs to be one of: {', '.join(column_names)}"
             )
     if args.caption_column is None:
         caption_column = (
-            dataset_columns[1] if dataset_columns is not None else column_names[1]
+            dataset_columns[1] if dataset_columns is not None else column_names[1] #text
         )
     else:
-        caption_column = args.caption_column
+        caption_column = args.caption_column #user input
         if caption_column not in column_names:
             raise ValueError(
                 f"--caption_column' value '{args.caption_column}' needs to be one of: {', '.join(column_names)}"
-            )
+            ) 
 
     # Preprocessing the datasets.
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples, is_train=True):
         captions = []
-        for caption in examples[caption_column]:
-
-            caption = caption.strip()
-            first, second = caption.split("_")
+        for caption in examples[caption_column]: #ex) examples['text']
+            caption = caption.strip() #ex) cat_box
+            first, second = caption.split("_") #ex) cat, box
             try:
                 caption = open(
                     f"{args.dataset_path}/{first}/{second}/caption.txt"
-                ).readlines()[0]
+                ).readlines()[0] #default dataset_path: /home/cjy/cjy/TextDiffusion/data/laion-ocr-unzip
             except:
                 caption = "null"
                 print("erorr of caption")
 
             if args.drop_caption and is_train and random.random() < 0.1:
-                caption = ""  # drop caption with 10% probability
+                caption = ""  # drop caption with 10% probability 
 
             if isinstance(caption, str):
                 captions.append(caption)
             elif isinstance(caption, (list, np.ndarray)):
                 # take a random caption if there are multiple
                 captions.append(random.choice(caption) if is_train else caption[0])
+                #train시에는  random choice로 caption을 선택
             else:
                 raise ValueError(
                     f"Caption column `{caption_column}` should contain either strings or lists of strings."
@@ -665,6 +666,7 @@ def main():
             truncation=True,
             return_tensors="pt",
         )
+        #return the tokenized captions by pretrained tokenizer
         return inputs.input_ids
 
     # Preprocessing the datasets.
@@ -709,7 +711,7 @@ def main():
         return int(x1), int(y1)
 
     def box2point(box):
-        # convert string to list
+        # convert string of points to list of points
         box = box.split(",")
         box = [int(i) // (512 // 512) for i in box]
         points = [
@@ -722,15 +724,15 @@ def main():
 
     def get_mask(ocrs):
         # the two branches are trained at a certain ratio
-        if random.random() <= args.mask_all_ratio:
-            image_mask = Image.new("L", (512, 512), 1)
+        if random.random() <= args.mask_all_ratio: #ex) args.mask_all_ratio = 0.1
+            image_mask = Image.new("L", (512, 512), 1) #all white 512x512 image mask
             return image_mask
 
         image_mask = Image.new("L", (512, 512), 0)
-        draw_image_mask = ImageDraw.ImageDraw(image_mask)
-        for ocr in ocrs:
+        draw_image_mask = ImageDraw.ImageDraw(image_mask) #draw on the image mask
+        for ocr in ocrs: 
             ocr = ocr.strip()
-            _, box, _ = ocr.split()
+            _, box, _ = ocr.split() #box from stage1
             if random.random() < 0.5:  # each box is masked with 50% probability
                 points = box2point(box)
                 draw_image_mask.polygon(points, fill=1)
@@ -738,11 +740,11 @@ def main():
         blank = Image.new("RGB", (512, 512), (0, 0, 0))
         rectangles = generate_random_rectangles(
             blank
-        )  # get additional masks (can mask non-text areas)
+        )  # get additional masks (can mask non-text areas): why is it needed?
         for rectangle in rectangles:
             draw_image_mask.polygon(rectangle, fill=1)
 
-        return image_mask
+        return image_mask #random mask word mask랑 섞음
 
     def preprocess_train(examples):
         # preprocess the training data
@@ -844,11 +846,10 @@ def main():
             ],
             dim=0,
         )
+        #size: (batch_size, 1, 512, 512)
         return {
             "images": images,
-            "prompts": prompts,
-            "segmentation_masks": segmentation_masks,
-            "image_masks": image_masks,
+            "prompts": prompts, 
         }
 
     # DataLoaders creation:
@@ -993,6 +994,8 @@ def main():
                 image_masks = batch["image_masks"]
 
                 masked_images = batch["images"] * (1 - image_masks).unsqueeze(1)
+                #size of image_masks: (batch_size, 1, 512, 512)
+                #size of masked_images: (batch_size, 3, 512, 512)
                 masked_features = vae.encode(
                     masked_images.to(weight_dtype)
                 ).latent_dist.sample()
@@ -1002,27 +1005,32 @@ def main():
                 image_masks_256 = F.interpolate(
                     image_masks.unsqueeze(1), size=(256, 256), mode="nearest"
                 )
+                #256x256로 resize
+                #size of image_masks_256: (batch_size, 1, 256, 256)
                 segmentation_masks = image_masks_256 * segmentation_masks
+                #element-wise multiplication
                 feature_masks = F.interpolate(
                     image_masks.unsqueeze(1), size=(64, 64), mode="nearest"
                 )
+                #size of feature_masks: (batch_size, 1, 64, 64)
+                #64x64로 resize
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(features)
                 if args.noise_offset:
-                    # https://www.crosslabs.org//blog/diffusion-with-offset-noise
+                    # https://www.crosslabs.org//blog/diffusion-with-offset-noise #entire image에 대해서 같은 noise를 추가 
                     noise += args.noise_offset * torch.randn(
                         (features.shape[0], features.shape[1], 1, 1),
                         device=features.device,
                     )
 
-                bsz = features.shape[0]
+                bsz = features.shape[0] #batch size
                 timesteps = torch.randint(
                     0,
                     noise_scheduler.num_train_timesteps,
                     (bsz,),
                     device=features.device,
-                )
+                ) #ramdomly selected timestep
                 timesteps = timesteps.long()
 
                 noisy_latents = noise_scheduler.add_noise(features, noise, timesteps)
@@ -1146,6 +1154,7 @@ def main():
                     feature_mask=feature_masks,
                     segmentation_mask=segmentation_masks,
                 ).sample
+                #size of model_pred: (batch_size, 4, 64, 64)
 
                 pred_x0 = noise_scheduler.get_x0_from_noise(
                     model_pred, timesteps, noisy_latents
