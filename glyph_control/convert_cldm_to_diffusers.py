@@ -140,6 +140,7 @@ def convert(
     sample_size: int = 512,
     scheduler_type: str = "pndm",
     extract_ema: bool = True,
+    revision: Optional[str] = None,
     progress=gr.Progress(),
 ):
     api = HfApi()
@@ -170,9 +171,10 @@ def convert(
                 repo_id=model_id,
                 repo_type="model",
                 token=token,
-                commit_message=pr_title,
+                commit_message=filename.split(".")[0],
                 commit_description=COMMIT_MESSAGE.format(model_id),
-                create_pr=True,
+                # create_pr=True,
+                revision=revision
             )
             pr_number = new_pr.split("%2F")[-1].split("/")[0]
             link = f"Pr created at: {'https://huggingface.co/' + os.path.join(model_id, 'discussions', pr_number)}"
