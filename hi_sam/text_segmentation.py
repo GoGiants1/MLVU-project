@@ -2,8 +2,6 @@ import gc
 import os
 import random
 from dataclasses import dataclass, field
-from gc import garbage
-from typing import List
 
 import numpy as np
 import PIL

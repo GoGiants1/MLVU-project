@@ -1,4 +1,3 @@
-import glob
 import os
 
 import cv2
@@ -6,12 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pyclipper
 import torch
-from PIL import Image
 from shapely.geometry import Polygon
 from tqdm import tqdm
 
 from hi_sam.models.build import model_registry
-from hi_sam.models.predictor import SamPredictor
 
 
 def unclip(p, unclip_ratio=2.0):

@@ -1,7 +1,6 @@
 import os
 import shutil
 import tempfile
-from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
@@ -9,9 +8,8 @@ from typing import Optional
 import gradio as gr
 import requests
 import torch
-from huggingface_hub import CommitInfo, Discussion, HfApi, hf_hub_download
+from huggingface_hub import Discussion, HfApi, hf_hub_download
 from huggingface_hub.file_download import repo_folder_name
-from transformers import CONFIG_MAPPING
 
 from diffusers.pipelines.stable_diffusion.convert_from_ckpt import (
     download_controlnet_from_original_ckpt,

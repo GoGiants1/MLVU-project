@@ -8,6 +8,7 @@ import os
 from functools import partial
 
 import torch
+from huggingface_hub import hf_hub_download
 from torch import nn
 
 from .efficient_hi_sam import EfficientHiSam
@@ -22,7 +23,7 @@ from .mask_decoder import HiDecoder, MaskDecoder
 from .modal_aligner import ModalAligner
 from .prompt_encoder import PromptEncoder
 from .transformer import TwoWayTransformer
-from huggingface_hub import hf_hub_download
+
 
 def build_sam_vit_h(args):
     return _build_sam(
@@ -173,7 +174,7 @@ def _build_sam(
                 for key, value in mask_decoder_dict.items():
                     new_key = key.replace("mask_decoder", "hi_decoder")
                     state_dict[new_key] = value
-        
+
         sam_ckpt_name = {
             "vit_b": "sam_vit_b_01ec64.pth",
             "vit_l": "sam_vit_l_0b3195.pth",
