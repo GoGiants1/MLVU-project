@@ -1,109 +1,184 @@
-# coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""Conversion script for stable diffusion checkpoints which _only_ contain a controlnet."""
+import os
+import shutil
+import tempfile
+from io import BytesIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Optional
 
-import argparse
+import gradio as gr
+import requests
+import torch
+from huggingface_hub import CommitInfo, Discussion, HfApi, hf_hub_download
+from huggingface_hub.file_download import repo_folder_name
+from transformers import CONFIG_MAPPING
 
-from diffusers.pipelines.stable_diffusion.convert_from_ckpt import download_controlnet_from_original_ckpt
+from diffusers.pipelines.stable_diffusion.convert_from_ckpt import (
+    download_controlnet_from_original_ckpt,
+    download_from_original_stable_diffusion_ckpt,
+)
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+COMMIT_MESSAGE = (
+    " This PR adds fp32 and fp16 weights in PyTorch and safetensors format to {}"
+)
 
-    parser.add_argument(
-        "--checkpoint_path", default=None, type=str, required=True, help="Path to the checkpoint to convert."
-    )
-    parser.add_argument(
-        "--original_config_file",
-        type=str,
-        required=True,
-        help="The YAML config file corresponding to the original architecture.",
-    )
-    parser.add_argument(
-        "--num_in_channels",
-        default=None,
-        type=int,
-        help="The number of input channels. If `None` number of input channels will be automatically inferred.",
-    )
-    parser.add_argument(
-        "--image_size",
-        default=512,
-        type=int,
-        help=(
-            "The image size that the model was trained on. Use 512 for Stable Diffusion v1.X and Stable Siffusion v2"
-            " Base. Use 768 for Stable Diffusion v2."
-        ),
-    )
-    parser.add_argument(
-        "--extract_ema",
-        action="store_true",
-        help=(
-            "Only relevant for checkpoints that have both EMA and non-EMA weights. Whether to extract the EMA weights"
-            " or not. Defaults to `False`. Add `--extract_ema` to extract the EMA weights. EMA weights usually yield"
-            " higher quality images for inference. Non-EMA weights are usually better to continue fine-tuning."
-        ),
-    )
-    parser.add_argument(
-        "--upcast_attention",
-        action="store_true",
-        help=(
-            "Whether the attention computation should always be upcasted. This is necessary when running stable"
-            " diffusion 2.1."
-        ),
-    )
-    parser.add_argument(
-        "--from_safetensors",
-        action="store_true",
-        help="If `--checkpoint_path` is in `safetensors` format, load checkpoint with safetensors instead of PyTorch.",
-    )
-    parser.add_argument(
-        "--to_safetensors",
-        action="store_true",
-        help="Whether to store pipeline in safetensors format or not.",
-    )
-    parser.add_argument("--dump_path", default=None, type=str, required=True, help="Path to the output model.")
-    parser.add_argument("--device", type=str, help="Device to use (e.g. cpu, cuda:0, cuda:1, etc.)")
 
-    # small workaround to get argparser to parse a boolean input as either true _or_ false
-    def parse_bool(string):
-        if string == "True":
-            return True
-        elif string == "False":
-            return False
+def convert_single(
+    model_id: str,
+    token: str,
+    filename: str,
+    model_type: str,
+    sample_size: int,
+    scheduler_type: str,
+    extract_ema: bool,
+    folder: str,
+    progress,
+    subfolder=None,
+):
+    from_safetensors = filename.endswith(".safetensors")
+
+    progress(0, desc="Downloading model")
+    local_file = os.path.join(model_id, filename)
+    ckpt_file = (
+        local_file
+        if os.path.isfile(local_file)
+        else hf_hub_download(
+            repo_id="AIGText/GlyphControl",
+            filename=filename,
+            token=token,
+            subfolder=subfolder,
+        )
+    )
+
+    if model_type == "v1":
+        config_url = "https://raw.githubusercontent.com/CompVis/stable-diffusion/main/configs/stable-diffusion/v1-inference.yaml"
+    elif model_type == "v2":
+        if sample_size == 512:
+            config_url = "https://raw.githubusercontent.com/Stability-AI/stablediffusion/main/configs/stable-diffusion/v2-inference.yaml"
         else:
-            raise ValueError(f"could not parse string as bool {string}")
+            config_url = "https://raw.githubusercontent.com/Stability-AI/stablediffusion/main/configs/stable-diffusion/v2-inference-v.yaml"
+    elif model_type == "ControlNet":
+        config_url = (Path(model_id) / "resolve/main" / filename).with_suffix(".yaml")
+        config_url = "https://huggingface.co/" + str(config_url)
+    elif model_type == "GlyphControl":
+        config_url = "https://github.com/AIGText/GlyphControl-release/raw/main/configs/config.yaml"
 
-    parser.add_argument(
-        "--use_linear_projection", help="Override for use linear projection", required=False, type=parse_bool
-    )
+    # config_file = BytesIO(requests.get(config_url).content)
 
-    parser.add_argument("--cross_attention_dim", help="Override for cross attention_dim", required=False, type=int)
+    response = requests.get(config_url)
+    with tempfile.NamedTemporaryFile(delete=False, mode="wb") as tmp_file:
+        tmp_file.write(response.content)
+        temp_config_file_path = tmp_file.name
 
-    args = parser.parse_args()
+    if model_type == "ControlNet":
+        progress(0.2, desc="Converting ControlNet Model")
+        pipeline = download_controlnet_from_original_ckpt(
+            ckpt_file,
+            temp_config_file_path,
+            image_size=sample_size,
+            from_safetensors=from_safetensors,
+            extract_ema=extract_ema,
+        )
+        to_args = {"dtype": torch.float16}
+    elif model_type == "GlyphControl":
+        progress(0.1, desc="Converting Model")
+        pipeline = download_controlnet_from_original_ckpt(
+            ckpt_file,
+            temp_config_file_path,
+            image_size=sample_size,
+            from_safetensors=from_safetensors,
+            extract_ema=extract_ema,
+        )
+        to_args = {"torch_dtype": torch.float16}
+    else:
+        progress(0.1, desc="Converting Model")
+        pipeline = download_from_original_stable_diffusion_ckpt(
+            ckpt_file,
+            temp_config_file_path,
+            image_size=sample_size,
+            scheduler_type=scheduler_type,
+            from_safetensors=from_safetensors,
+            extract_ema=extract_ema,
+        )
+        to_args = {"torch_dtype": torch.float16}
 
-    controlnet = download_controlnet_from_original_ckpt(
-        checkpoint_path=args.checkpoint_path,
-        original_config_file=args.original_config_file,
-        image_size=args.image_size,
-        extract_ema=args.extract_ema,
-        num_in_channels=args.num_in_channels,
-        upcast_attention=args.upcast_attention,
-        from_safetensors=args.from_safetensors,
-        device=args.device,
-        use_linear_projection=args.use_linear_projection,
-        cross_attention_dim=args.cross_attention_dim,
-    )
+    pipeline.save_pretrained(folder)
+    pipeline.save_pretrained(folder, safe_serialization=True)
 
-    controlnet.save_pretrained(args.dump_path, safe_serialization=args.to_safetensors)
+    pipeline = pipeline.to(**to_args)
+    pipeline.save_pretrained(folder, variant="fp16")
+    pipeline.save_pretrained(folder, safe_serialization=True, variant="fp16")
+
+    return folder
+
+
+def previous_pr(api: "HfApi", model_id: str, pr_title: str) -> Optional["Discussion"]:
+    try:
+        discussions = api.get_repo_discussions(repo_id=model_id)
+    except Exception:
+        return None
+    for discussion in discussions:
+        if (
+            discussion.status == "open"
+            and discussion.is_pull_request
+            and discussion.title == pr_title
+        ):
+            details = api.get_discussion_details(
+                repo_id=model_id, discussion_num=discussion.num
+            )
+            if details.target_branch == "refs/heads/main":
+                return discussion
+
+
+def convert(
+    token: str,
+    model_id: str,
+    filename: str,
+    model_type: str,
+    sample_size: int = 512,
+    scheduler_type: str = "pndm",
+    extract_ema: bool = True,
+    progress=gr.Progress(),
+):
+    api = HfApi()
+
+    pr_title = "Adding `diffusers` weights of this model"
+
+    with TemporaryDirectory() as d:
+        folder = os.path.join(d, repo_folder_name(repo_id=model_id, repo_type="models"))
+        os.makedirs(folder)
+        new_pr = None
+        try:
+            folder = convert_single(
+                model_id,
+                token,
+                filename,
+                model_type,
+                sample_size,
+                scheduler_type,
+                extract_ema,
+                folder,
+                progress,
+                subfolder="checkpoints",
+            )
+            progress(0.7, desc="Uploading to Hub")
+            new_pr = api.upload_folder(
+                folder_path=folder,
+                path_in_repo="./",
+                repo_id=model_id,
+                repo_type="model",
+                token=token,
+                commit_message=pr_title,
+                commit_description=COMMIT_MESSAGE.format(model_id),
+                create_pr=True,
+            )
+            pr_number = new_pr.split("%2F")[-1].split("/")[0]
+            link = f"Pr created at: {'https://huggingface.co/' + os.path.join(model_id, 'discussions', pr_number)}"
+            progress(1, desc="Done")
+        except Exception as e:
+            raise gr.exceptions.Error(str(e))
+        finally:
+            shutil.rmtree(folder)
+
+        return link
