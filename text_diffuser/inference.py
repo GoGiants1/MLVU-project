@@ -49,14 +49,15 @@ from util import (
 )
 
 import diffusers
-from diffusers import (
-    AutoencoderKL,
-    DDPMScheduler,
-    UNet2DConditionModel,
-)
+from diffusers import AutoencoderKL
 from diffusers.utils import check_min_version
-from diffusers.utils.import_utils import is_xformers_available
+from t_diffusers.scheduling_ddpm import DDPMScheduler
+from t_diffusers.unet_2d_condition import UNet2DConditionModel
 
+
+'''
+from diffusers.utils.import_utils import is_xformers_available
+'''
 
 disable_caching()
 check_min_version("0.15.0.dev0")
@@ -317,7 +318,6 @@ def main():
         gradient_accumulation_steps=1,
         mixed_precision=args.mixed_precision,
         log_with=args.report_to,
-        logging_dir=logging_dir,
         project_config=accelerator_project_config,
     )
 
@@ -389,29 +389,12 @@ def main():
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
 
-    if args.enable_xformers_memory_efficient_attention:
-        if is_xformers_available():
-            import xformers
-
-            xformers_version = version.parse(xformers.__version__)
-            if xformers_version == version.parse("0.0.16"):
-                logger.warn(
-                    "xFormers 0.0.16 cannot be used for training in some GPUs. If you observe problems during training, please update xFormers to at least 0.0.17. See https://huggingface.co/docs/diffusers/main/en/optimization/xformers for more details."
-                )
-            unet.enable_xformers_memory_efficient_attention()
-        else:
-            raise ValueError(
-                "xformers is not available. Make sure it is installed correctly"
-            )
-
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
         # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
         def save_model_hook(models, weights, output_dir):
-
             for i, model in enumerate(models):
                 model.save_pretrained(os.path.join(output_dir, "unet"))
-
                 # make sure to pop weight so that corresponding model is not saved again
                 weights.pop()
 

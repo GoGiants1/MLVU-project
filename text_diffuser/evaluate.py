@@ -14,52 +14,41 @@ from pathlib import Path
 from typing import Optional
 
 import accelerate
-import cv2
 import datasets
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
-import torchsnooper
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
-from datasets import disable_caching, load_dataset
+from datasets import disable_caching
 from huggingface_hub import HfFolder, Repository, create_repo, whoami
 from model.layout_generator import get_layout_from_prompt
 from model.text_segmenter.unet import UNet
 from packaging import version
 from PIL import (
     Image,
-    ImageDraw,
-    ImageEnhance,
-    ImageFont,
-    ImageOps,
-)  # import for visualization
+)
+
+# import for visualization
 from termcolor import colored
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 from util import (
-    combine_image,
     filter_segmentation_mask,
-    inpainting_merge_image,
     make_caption_pil,
     segmentation_mask_visualization,
-    transform_mask,
 )
 
 import diffusers
 from diffusers import (
     AutoencoderKL,
     DDPMScheduler,
-    StableDiffusionPipeline,
     UNet2DConditionModel,
 )
-from diffusers.optimization import get_scheduler
-from diffusers.training_utils import EMAModel
-from diffusers.utils import check_min_version, deprecate
+from diffusers.utils import check_min_version
 from diffusers.utils.import_utils import is_xformers_available
 
 

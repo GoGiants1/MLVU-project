@@ -122,7 +122,7 @@ def make_caption_pil(font_path: str, captions: List[str]):
         text = caption
         lines = textwrap.wrap(text, width=40)
         x, y = 4, 4
-        line_height = font.getsize("A")[1] + 4
+        line_height = getsize(font,"A")[1] + 4
 
         start = 0
         for line in lines:
@@ -239,6 +239,9 @@ def combine_image_gradio(
 
     return blank
 
+def getsize(font, text):
+    left, top, right, bottom = font.getbbox(text)
+    return right - left, bottom - top
 
 def get_width(font_path, text):
     """
@@ -249,7 +252,7 @@ def get_width(font_path, text):
         text (str): user prompt.
     """
     font = ImageFont.truetype(font_path, 24)
-    width, _ = font.getsize(text)
+    width = getsize(font, text)[0]
     return width
 
 
@@ -351,7 +354,7 @@ def adjust_font_size(args, width, height, draw, text):
     size_start = height
     while True:
         font = ImageFont.truetype(args.font_path, size_start)
-        text_width, _ = draw.textsize(text, font=font)
+        text_width = draw.textlength(text, font=font)
         if text_width >= width:
             size_start = size_start - 1
         else:

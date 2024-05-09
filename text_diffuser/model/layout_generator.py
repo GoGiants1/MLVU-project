@@ -193,6 +193,9 @@ def get_layout_from_prompt(args):
     padding = torch.zeros(1, 1, 4).cuda()
     boxes = boxes.unsqueeze(0).cuda()
     right_shifted_boxes = torch.cat([padding, boxes[:, 0:-1, :]], 1)  # (1, 8, 4)
+    def getsize(font, text):
+        left, top, right, bottom = font.getbbox(text)
+        return right - left, bottom - top
 
     # inference
     return_boxes = []
@@ -257,8 +260,8 @@ def get_layout_from_prompt(args):
 
             # paint character-level segmentation masks
             # https://github.com/python-pillow/Pillow/issues/3921
-            bottom_1 = font.getsize(text[i])[1]
-            right, bottom_2 = font.getsize(text[: i + 1])
+            _ , bottom_1 = getsize(font, text[i])
+            right, bottom_2 = getsize(font, text[: i + 1])
             bottom = bottom_1 if bottom_1 < bottom_2 else bottom_2
             width, height = font.getmask(char).size
             right += xmin

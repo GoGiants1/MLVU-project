@@ -26,10 +26,9 @@ import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
-from datasets import load_dataset
 from huggingface_hub import HfFolder, Repository, create_repo, whoami
 from packaging import version
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from termcolor import colored
 from torchvision import transforms
 from tqdm.auto import tqdm
@@ -504,7 +503,7 @@ def main():
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
-    
+
     if args.enable_xformers_memory_efficient_attention:
         if is_xformers_available():
             import xformers
@@ -591,7 +590,7 @@ def main():
         eps=args.adam_epsilon,
     )
 
-    from datasets import Dataset, load_dataset
+    from datasets import Dataset
 
     lines = open(args.train_dataset_index_file).readlines()
     random.shuffle(lines)
@@ -629,7 +628,7 @@ def main():
         if caption_column not in column_names:
             raise ValueError(
                 f"--caption_column' value '{args.caption_column}' needs to be one of: {', '.join(column_names)}"
-            ) 
+            )
 
     # Preprocessing the datasets.
     # We need to tokenize input captions and transform the images.
@@ -647,7 +646,7 @@ def main():
                 print("erorr of caption")
 
             if args.drop_caption and is_train and random.random() < 0.1:
-                caption = ""  # drop caption with 10% probability 
+                caption = ""  # drop caption with 10% probability
 
             if isinstance(caption, str):
                 captions.append(caption)
@@ -730,7 +729,7 @@ def main():
 
         image_mask = Image.new("L", (512, 512), 0)
         draw_image_mask = ImageDraw.ImageDraw(image_mask) #draw on the image mask
-        for ocr in ocrs: 
+        for ocr in ocrs:
             ocr = ocr.strip()
             _, box, _ = ocr.split() #box from stage1
             if random.random() < 0.5:  # each box is masked with 50% probability
@@ -849,7 +848,7 @@ def main():
         #size: (batch_size, 1, 512, 512)
         return {
             "images": images,
-            "prompts": prompts, 
+            "prompts": prompts,
         }
 
     # DataLoaders creation:
@@ -1018,7 +1017,7 @@ def main():
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(features)
                 if args.noise_offset:
-                    # https://www.crosslabs.org//blog/diffusion-with-offset-noise #entire image에 대해서 같은 noise를 추가 
+                    # https://www.crosslabs.org//blog/diffusion-with-offset-noise #entire image에 대해서 같은 noise를 추가
                     noise += args.noise_offset * torch.randn(
                         (features.shape[0], features.shape[1], 1, 1),
                         device=features.device,
