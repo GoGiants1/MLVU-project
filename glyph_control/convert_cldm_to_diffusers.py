@@ -45,6 +45,7 @@ def convert_single(
         if os.path.isfile(local_file)
         else hf_hub_download(
             repo_id="AIGText/GlyphControl",
+            repo_type="space",
             filename=filename,
             token=token,
             subfolder=subfolder,
