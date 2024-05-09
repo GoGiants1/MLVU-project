@@ -1,4 +1,5 @@
 import gc
+import os
 import random
 from dataclasses import dataclass, field
 from gc import garbage
@@ -7,9 +8,13 @@ from typing import List
 import numpy as np
 import PIL
 import torch
+from huggingface_hub import hf_hub_download
+from tqdm import tqdm
 
 from hi_sam.models.auto_mask_generator import AutoMaskGenerator
 from hi_sam.models.build import model_registry
+from hi_sam.models.predictor import SamPredictor
+from hi_sam.utils.patchify import patchify_sliding, unpatchify_sliding
 
 
 @dataclass
@@ -55,13 +60,31 @@ def make_text_segmentation_args(
     input_size: tuple[int, int] = (1024, 1024),
     dataset: str = "totaltext",
     zero_shot: bool = False,
+    hier_det: bool = True,
 ):
+    """
+    Create a HisamArgs object for text segmentation.
+
+    args:
+        `checkpoint_path`: The local path to the checkpoint to use for text segmentation or filename in hf_hub.
+        https://huggingface.co/GoGiants1/Hi-SAM/tree/main
+    """
+    ckpt_path = (
+        checkpoint_path
+        if os.path.isfile(checkpoint_path)
+        else hf_hub_download(
+            repo_id="GoGiants1/Hi-SAM",
+            repo_type="model",
+            filename=checkpoint_path,
+        )
+    )
+
     args = HisamArgs(
         model_type=model_type,
-        checkpoint=checkpoint_path,
+        checkpoint=ckpt_path,
         dataset=dataset,
         input_size=input_size,
-        hier_det=True,
+        hier_det=hier_det,
         zero_shot=zero_shot,
         layout_thresh=0.5,
         patch_mode=True,
@@ -95,7 +118,17 @@ def load_auto_mask_generator(args: HisamArgs):
     return amg
 
 
-def model_to_device(amg: AutoMaskGenerator, device: str = "cpu"):
+def load_sam_predictor(args: HisamArgs):
+    set_random_seed(args.seed)
+    empty_cuda_cache()
+    model = model_registry[args.model_type](args)
+    model.eval()
+    model.to(args.device)
+    sam = SamPredictor(model)
+    return sam
+
+
+def model_to_device(amg: AutoMaskGenerator | SamPredictor, device: str = "cpu"):
     amg.model.to(device)
     empty_cuda_cache()
     return amg
@@ -155,3 +188,34 @@ def run_text_detection(
     )
 
     return masks, scores
+
+
+def run_text_stroke_segmentation(
+    sam_detector: SamPredictor,
+    image: PIL.Image.Image | np.ndarray,
+    patch_mode: bool = False,
+):
+    mask = None
+    if patch_mode:
+        ori_size = image.shape[:2]
+        patch_list, h_slice_list, w_slice_list = patchify_sliding(
+            image, 512, 384
+        )  # sliding window config
+        mask_512 = []
+        for patch in tqdm(patch_list):
+            sam_detector.set_image(patch)
+            m, hr_m, score, hr_score = sam_detector.predict(
+                multimask_output=False, return_logits=True
+            )
+            assert hr_m.shape[0] == 1  # high-res mask
+            mask_512.append(hr_m[0])
+        mask_512 = unpatchify_sliding(mask_512, h_slice_list, w_slice_list, ori_size)
+        assert mask_512.shape[-2:] == ori_size
+        mask = mask_512
+        mask = mask > sam_detector.model.mask_threshold
+        print("Mask shape: ", mask.shape)
+    else:
+        mask, hr_mask, score, hr_score = sam_detector.predict(multimask_output=False)
+        print("Mask shape: ", mask.shape)
+
+    return mask
