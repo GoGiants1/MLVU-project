@@ -194,10 +194,11 @@ def run_text_stroke_segmentation(
     patch_mode: bool = False,
 ):
     mask = None
+    image_arr = np.array(image) if isinstance(image, PIL.Image.Image) else image
     if patch_mode:
-        ori_size = image.shape[:2]
+        ori_size = image_arr.shape[:2]
         patch_list, h_slice_list, w_slice_list = patchify_sliding(
-            image, 512, 384
+            image_arr, 512, 384
         )  # sliding window config
         mask_512 = []
         for patch in tqdm(patch_list):
