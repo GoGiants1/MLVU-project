@@ -68,7 +68,7 @@ def convert_single(
     # config_file = BytesIO(requests.get(config_url).content)
 
     response = requests.get(config_url)
-    with tempfile.NamedTemporaryFile(delete=False, mode="wb") as tmp_file:
+    with tempfile.NamedTemporaryFile(delete=False, mode="wb", dir="./") as tmp_file:
         tmp_file.write(response.content)
         temp_config_file_path = tmp_file.name
 
@@ -91,7 +91,7 @@ def convert_single(
             from_safetensors=from_safetensors,
             extract_ema=extract_ema,
         )
-        to_args = {"torch_dtype": torch.float16}
+        to_args = {"dtype": torch.float16}
     else:
         progress(0.1, desc="Converting Model")
         pipeline = download_from_original_stable_diffusion_ckpt(
@@ -102,7 +102,7 @@ def convert_single(
             from_safetensors=from_safetensors,
             extract_ema=extract_ema,
         )
-        to_args = {"torch_dtype": torch.float16}
+        to_args = {"dtype": torch.float16}
 
     pipeline.save_pretrained(folder)
     pipeline.save_pretrained(folder, safe_serialization=True)
