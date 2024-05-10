@@ -436,7 +436,7 @@ def main():
         padding="max_length",
         truncation=True,
         return_tensors="pt",
-    ).input_ids  # (b, 77)
+    ).input_ids  # (b, 77) id로 token을 숫자화
     encoder_hidden_states = text_encoder(inputs)[0].cuda()  # (b, 77, 768)
     print(
         f'{colored("[√]", "green")} encoder_hidden_states: {encoder_hidden_states.shape}.'
@@ -449,7 +449,7 @@ def main():
         truncation=True,
         return_tensors="pt",
     ).input_ids  # (b, 77)
-    encoder_hidden_states_nocond = text_encoder(inputs_nocond)[0].cuda()  # (b, 77, 768)
+    encoder_hidden_states_nocond = text_encoder(inputs_nocond)[0].cuda()  # (b, 77, 768) 1024size로 나중에 rescale?
     print(
         f'{colored("[√]", "green")} encoder_hidden_states_nocond: {encoder_hidden_states_nocond.shape}.'
     )
@@ -555,8 +555,8 @@ def main():
     if args.mode == "text-inpainting":
         text_mask = cv2.imread(args.text_mask)
         threshold = 128
-        _, text_mask = cv2.threshold(text_mask, threshold, 255, cv2.THRESH_BINARY)
-        text_mask = Image.fromarray(text_mask).convert("RGB").resize((256, 256))
+        _, text_mask = cv2.threshold(text_mask, threshold, 255, cv2.THRESH_BINARY) 
+        text_mask = Image.fromarray(text_mask).convert("RGB").resize((256, 256)) 
         text_mask_tensor = (
             transforms.ToTensor()(text_mask).unsqueeze(0).cuda().sub_(0.5).div_(0.5)
         )
@@ -690,11 +690,13 @@ def main():
         # merge
         pred_image_list_new = []
         for pred_image in pred_image_list:
+            '''
             pred_image = inpainting_merge_image(
                 Image.open(args.original_image),
                 Image.open(args.text_mask).convert("L"),
                 pred_image,
             )
+            '''
             pred_image_list_new.append(pred_image)
         pred_image_list = pred_image_list_new
 
