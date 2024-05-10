@@ -33,6 +33,8 @@ from PIL import (
     ImageEnhance,
     ImageOps,
 )
+from t_diffusers.scheduling_ddpm import DDPMScheduler
+from t_diffusers.unet_2d_condition import UNet2DConditionModel
 
 # import for visualization
 from termcolor import colored
@@ -42,7 +44,6 @@ from transformers import CLIPTextModel, CLIPTokenizer
 from util import (
     combine_image,
     filter_segmentation_mask,
-    inpainting_merge_image,
     make_caption_pil,
     segmentation_mask_visualization,
     transform_mask,
@@ -51,8 +52,6 @@ from util import (
 import diffusers
 from diffusers import AutoencoderKL
 from diffusers.utils import check_min_version
-from t_diffusers.scheduling_ddpm import DDPMScheduler
-from t_diffusers.unet_2d_condition import UNet2DConditionModel
 
 
 '''
@@ -555,8 +554,8 @@ def main():
     if args.mode == "text-inpainting":
         text_mask = cv2.imread(args.text_mask)
         threshold = 128
-        _, text_mask = cv2.threshold(text_mask, threshold, 255, cv2.THRESH_BINARY) 
-        text_mask = Image.fromarray(text_mask).convert("RGB").resize((256, 256)) 
+        _, text_mask = cv2.threshold(text_mask, threshold, 255, cv2.THRESH_BINARY)
+        text_mask = Image.fromarray(text_mask).convert("RGB").resize((256, 256))
         text_mask_tensor = (
             transforms.ToTensor()(text_mask).unsqueeze(0).cuda().sub_(0.5).div_(0.5)
         )
