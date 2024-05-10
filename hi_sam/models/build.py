@@ -8,6 +8,7 @@ import os
 from functools import partial
 
 import torch
+from huggingface_hub import hf_hub_download
 from torch import nn
 
 from .efficient_hi_sam import EfficientHiSam
@@ -174,13 +175,19 @@ def _build_sam(
                     new_key = key.replace("mask_decoder", "hi_decoder")
                     state_dict[new_key] = value
 
+        sam_ckpt_name = {
+            "vit_b": "sam_vit_b_01ec64.pth",
+            "vit_l": "sam_vit_l_0b3195.pth",
+            "vit_h": "sam_vit_h_4b8939.pth",
+        }
+        sam_path = os.path.join("pretrained_checkpoint", sam_ckpt_name[args.model_type])
+        if not os.path.isfile(sam_path):
+            sam_path = hf_hub_download(
+                repo_id="GoGiants1/Hi-SAM",
+                repo_type="model",
+                filename=sam_ckpt_name[args.model_type],
+            )
         # load SAM's ViT backbone paras.
-        if args.model_type == "vit_b":
-            sam_path = os.path.join("pretrained_checkpoint", "sam_vit_b_01ec64.pth")
-        elif args.model_type == "vit_l":
-            sam_path = os.path.join("pretrained_checkpoint", "sam_vit_l_0b3195.pth")
-        elif args.model_type == "vit_h":
-            sam_path = os.path.join("pretrained_checkpoint", "sam_vit_h_4b8939.pth")
         with open(sam_path, "rb") as f:
             sam_dict = torch.load(f)
         for key, value in sam_dict.items():
