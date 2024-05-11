@@ -2,3 +2,7 @@
 *.jpg
 *.png
 *.pyc
+text_diffuser/textdiffuser-ckpt/*
+text_diffuser/output/*
+text_diffuser/assets/*
+
