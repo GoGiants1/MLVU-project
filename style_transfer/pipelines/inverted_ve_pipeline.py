@@ -212,7 +212,6 @@ class SharedAttentionProcessor:
             setattr(attn, "inference_step", 0)
         else:
             attn.inference_step += 1
-        print("Shared Attn Proc Inference Step: ", attn.inference_step)
         residual = hidden_states
         input_ndim = hidden_states.ndim
         if input_ndim == 4:
@@ -341,7 +340,6 @@ class SharedAttentionProcessor_v2:
             setattr(attn, "inference_step", 0)
         else:
             attn.inference_step += 1
-        print("Shared Attn Proc v2 Inference Step: ", attn.inference_step)
         residual = hidden_states
         input_ndim = hidden_states.ndim
         if input_ndim == 4:
@@ -483,9 +481,6 @@ class SharedAttentionProcessor_v2:
 
 
 def swapping_attention(key, value, chunk_size=2):
-    print(
-        "Swapping attn: ",
-    )
     chunk_length = key.size()[0] // chunk_size  # [text-condition, null-condition]
     reference_image_index = [0] * chunk_length  # [0 0 0 0 0]
     key = rearrange(key, "(b f) d c -> b f d c", f=chunk_length)
@@ -514,7 +509,7 @@ class CrossFrameAttnProcessor:
             setattr(attn, "inference_step", 0)
         else:
             attn.inference_step += 1
-        print("Inference Step: ", attn.inference_step)
+        # print("Inference Step: ", attn.inference_step)
         batch_size, sequence_length, _ = hidden_states.shape
         attention_mask = attn.prepare_attention_mask(
             attention_mask, sequence_length, batch_size
@@ -583,7 +578,7 @@ class CrossFrameAttnProcessor2_0:
             setattr(attn, "inference_step", 0)
         else:
             attn.inference_step += 1
-        print("Inference Step: ", attn.inference_step)
+        # print("Inference Step: ", attn.inference_step)
 
         batch_size, sequence_length, _ = hidden_states.shape
         attention_mask = attn.prepare_attention_mask(

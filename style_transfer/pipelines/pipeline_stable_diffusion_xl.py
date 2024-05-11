@@ -2233,10 +2233,9 @@ class StableDiffusionXLPipeline(
                             keys_scale=1.0,
                         )
             else:
-                attn_procs[name] = AttnProcessor()
+                attn_procs[name] = AttnProcessor2_0()
 
         self.unet.set_attn_processor(attn_procs)
-        print("activate_layer", str_activate_layer)
         return str_activate_layer, str_activate_step
 
     @torch.no_grad()
