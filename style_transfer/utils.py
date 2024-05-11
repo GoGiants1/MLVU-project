@@ -1,6 +1,7 @@
 import json
 import os
 
+import PIL
 import cv2
 import numpy as np
 import torch
@@ -89,16 +90,14 @@ def memory_efficient(model, device):
     #     print("enable_xformers_memory_efficient_attention is not supported.")
 
 
-def init_latent(model, device_name="cuda", dtype=torch.float16, seed=None):
+def init_latent(model, img: PIL.Image.Image, device_name="cuda", dtype=torch.float16, seed=None):
     scale_factor = model.vae_scale_factor
     sample_size = model.default_sample_size
     latent_dim = model.unet.config.in_channels
 
-    height = sample_size * scale_factor
-    width = sample_size * scale_factor
+    height, width = img.size
 
     shape = (1, latent_dim, height // scale_factor, width // scale_factor)
-
     device = torch.device(device_name)
     generator = torch.Generator(device).manual_seed(seed) if seed is not None else None
 
