@@ -1,9 +1,11 @@
+import gc
 import json
 import os
 
 import PIL
 import cv2
 import numpy as np
+import psutil
 import torch
 from PIL import Image
 
@@ -170,3 +172,58 @@ def get_depth_edge_array(
             depth_image_list.append(depth_map)
 
     return depth_image_list
+
+
+def memory_stats():
+    def gb(val: float):
+        return round(val / 1024 / 1024 / 1024, 2)
+
+    mem = {}
+    try:
+        process = psutil.Process(os.getpid())
+        res = process.memory_info()
+        ram_total = 100 * res.rss / process.memory_percent()
+        ram = {"used": gb(res.rss), "total": gb(ram_total)}
+        mem.update({"ram": ram})
+    except Exception as e:
+        mem.update({"ram": e})
+    try:
+        s = torch.cuda.mem_get_info()
+        gpu = {"used": gb(s[1] - s[0]), "total": gb(s[1])}
+        s = dict(torch.cuda.memory_stats())
+        mem.update(
+            {"gpu": gpu, "retries": s["num_alloc_retries"], "oom": s["num_ooms"]}
+        )
+        return mem
+    except Exception:
+        pass
+    return mem
+
+
+
+def torch_gc():
+    mem = memory_stats()
+    gpu = mem.get("gpu", {})
+    used = (
+        round(100 * gpu.get("used", 0) / gpu.get("total", 1))
+        if gpu.get("total", 1) > 1
+        else 0
+    )
+    
+    if used > 90:
+        print(f"GPU high memory utilization: {used}% {mem}")
+
+    collected = gc.collect()
+    if torch.cuda.is_available():
+        try:
+            with torch.cuda.device("cuda"):
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+        except Exception:
+            print("CUDA garbage collection failed", exc_info=True)
+            pass
+    
+
+    print(
+        f"gc: collected={collected} {memory_stats()}"
+    )
