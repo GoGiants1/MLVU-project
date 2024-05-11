@@ -37,6 +37,7 @@ from diffusers.models import AutoencoderKL, ImageProjection, UNet2DConditionMode
 from diffusers.models.attention_processor import (
     AttnProcessor2_0,
     FusedAttnProcessor2_0,
+    IPAdapterAttnProcessor2_0,
     LoRAAttnProcessor2_0,
     LoRAXFormersAttnProcessor,
     XFormersAttnProcessor,
