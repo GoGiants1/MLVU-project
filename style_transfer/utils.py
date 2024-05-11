@@ -83,10 +83,10 @@ def memory_efficient(model, device):
     except AttributeError:
         print("enable_vae_tiling is not supported.")
 
-    try:
-        model.enable_xformers_memory_efficient_attention()
-    except AttributeError:
-        print("enable_xformers_memory_efficient_attention is not supported.")
+    # try:
+    #     model.enable_xformers_memory_efficient_attention()
+    # except AttributeError:
+    #     print("enable_xformers_memory_efficient_attention is not supported.")
 
 
 def init_latent(model, device_name="cuda", dtype=torch.float16, seed=None):
