@@ -60,6 +60,7 @@ from diffusers.utils import (
 from diffusers.utils.torch_utils import randn_tensor
 from pipelines.inverted_ve_pipeline import (
     ACTIVATE_LAYER_CANDIDATE,
+    AttnProcessor,
     CrossFrameAttnProcessor,
     CrossFrameAttnProcessor2_0,
     SharedAttentionProcessor,
@@ -117,9 +118,12 @@ def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
     )
     return noise_cfg
 
+
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.retrieve_latents
 def retrieve_latents(
-    encoder_output: torch.Tensor, generator: Optional[torch.Generator] = None, sample_mode: str = "sample"
+    encoder_output: torch.Tensor,
+    generator: Optional[torch.Generator] = None,
+    sample_mode: str = "sample",
 ):
     if hasattr(encoder_output, "latent_dist") and sample_mode == "sample":
         return encoder_output.latent_dist.sample(generator)
@@ -129,6 +133,7 @@ def retrieve_latents(
         return encoder_output.latents
     else:
         raise AttributeError("Could not access latents of provided encoder_output")
+
 
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
 def retrieve_timesteps(
@@ -866,9 +871,16 @@ class StableDiffusionXLPipeline(
         latents = latents * self.scheduler.init_noise_sigma
         return latents
 
-
     def prepare_img_latents(
-        self, image, timestep, batch_size, num_images_per_prompt, dtype, device, generator=None, add_noise=True
+        self,
+        image,
+        timestep,
+        batch_size,
+        num_images_per_prompt,
+        dtype,
+        device,
+        generator=None,
+        add_noise=True,
     ):
         if not isinstance(image, (torch.Tensor, PIL.Image.Image, list)):
             raise ValueError(
@@ -901,12 +913,16 @@ class StableDiffusionXLPipeline(
 
             elif isinstance(generator, list):
                 init_latents = [
-                    retrieve_latents(self.vae.encode(image[i : i + 1]), generator=generator[i])
+                    retrieve_latents(
+                        self.vae.encode(image[i : i + 1]), generator=generator[i]
+                    )
                     for i in range(batch_size)
                 ]
                 init_latents = torch.cat(init_latents, dim=0)
             else:
-                init_latents = retrieve_latents(self.vae.encode(image), generator=generator)
+                init_latents = retrieve_latents(
+                    self.vae.encode(image), generator=generator
+                )
 
             if self.vae.config.force_upcast:
                 self.vae.to(dtype)
@@ -914,11 +930,19 @@ class StableDiffusionXLPipeline(
             init_latents = init_latents.to(dtype)
             init_latents = self.vae.config.scaling_factor * init_latents
 
-        if batch_size > init_latents.shape[0] and batch_size % init_latents.shape[0] == 0:
+        if (
+            batch_size > init_latents.shape[0]
+            and batch_size % init_latents.shape[0] == 0
+        ):
             # expand init_latents for batch_size
             additional_image_per_prompt = batch_size // init_latents.shape[0]
-            init_latents = torch.cat([init_latents] * additional_image_per_prompt, dim=0)
-        elif batch_size > init_latents.shape[0] and batch_size % init_latents.shape[0] != 0:
+            init_latents = torch.cat(
+                [init_latents] * additional_image_per_prompt, dim=0
+            )
+        elif (
+            batch_size > init_latents.shape[0]
+            and batch_size % init_latents.shape[0] != 0
+        ):
             raise ValueError(
                 f"Cannot duplicate `image` of batch size {init_latents.shape[0]} to {batch_size} text prompts."
             )
@@ -934,7 +958,7 @@ class StableDiffusionXLPipeline(
         latents = init_latents
 
         return latents
-    
+
     def _get_add_time_ids(
         self,
         original_size,
@@ -1470,7 +1494,7 @@ class StableDiffusionXLPipeline(
                         device,
                         generator,
                         True,
-                    )  # add_noise/
+                    )  # add_noise
 
                     latents[0] = zt[0]
 
@@ -2175,7 +2199,7 @@ class StableDiffusionXLPipeline(
         for name in self.unet.attn_processors.keys():
             if name in activate_layer:
                 if not use_shared_attention:
-                    attn_procs[name] = CrossFrameAttnProcessor2_0(
+                    attn_procs[name] = CrossFrameAttnProcessor(
                         unet_chunk_size=2,
                         attn_map_save_steps=attn_map_save_steps,
                         activate_step_indices=activate_step_indices,
@@ -2208,10 +2232,10 @@ class StableDiffusionXLPipeline(
                             keys_scale=1.0,
                         )
             else:
-                attn_procs[name] = AttnProcessor2_0()
+                attn_procs[name] = AttnProcessor()
 
         self.unet.set_attn_processor(attn_procs)
-
+        print("activate_layer", str_activate_layer)
         return str_activate_layer, str_activate_step
 
     @torch.no_grad()
