@@ -57,7 +57,6 @@ from util import (
 
 import diffusers
 from diffusers import AutoencoderKL
-from diffusers.loaders import ip_adapter
 from diffusers.models import ImageProjection
 from diffusers.models.modeling_utils import _LOW_CPU_MEM_USAGE_DEFAULT, _get_model_file
 from diffusers.utils import check_min_version
@@ -776,8 +775,6 @@ def main():
         batch_size * num_images_per_prompt,
         True,
     )
-
-
 
     added_cond_kwargs_cond = (
         {"image_embeds": image_embeds[0]} if (ip_adapter_image is not None) else None
