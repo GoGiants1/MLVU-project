@@ -11,7 +11,7 @@ import logging
 import os
 import random
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Union
 
 import accelerate
 import cv2
@@ -33,6 +33,7 @@ from PIL import (
     ImageEnhance,
     ImageOps,
 )
+from safetensors import safe_open
 from t_diffusers.scheduling_ddpm import DDPMScheduler
 from t_diffusers.unet_2d_condition import UNet2DConditionModel
 
@@ -40,7 +41,12 @@ from t_diffusers.unet_2d_condition import UNet2DConditionModel
 from termcolor import colored
 from torchvision import transforms
 from tqdm.auto import tqdm
-from transformers import CLIPTextModel, CLIPTokenizer
+from transformers import (
+    CLIPImageProcessor,
+    CLIPTextModel,
+    CLIPTokenizer,
+    CLIPVisionModelWithProjection,
+)
 from util import (
     combine_image,
     filter_segmentation_mask,
@@ -51,12 +57,14 @@ from util import (
 
 import diffusers
 from diffusers import AutoencoderKL
+from diffusers.loaders import ip_adapter
+from diffusers.models.modeling_utils import _LOW_CPU_MEM_USAGE_DEFAULT, _get_model_file
 from diffusers.utils import check_min_version
 
 
-'''
+"""
 from diffusers.utils.import_utils import is_xformers_available
-'''
+"""
 
 disable_caching()
 check_min_version("0.15.0.dev0")
@@ -296,6 +304,161 @@ def get_full_repo_name(
         return f"{organization}/{model_id}"
 
 
+def load_ip_adapter(
+    pretrained_model_name_or_path_or_dict: Union[
+        str, List[str], Dict[str, torch.Tensor]
+    ],
+    subfolder: Union[str, List[str]],
+    weight_name: Union[str, List[str]],
+    image_encoder_folder: Optional[str] = "image_encoder",
+    **kwargs,
+):
+    """
+    Parameters:
+        pretrained_model_name_or_path_or_dict (`str` or `List[str]` or `os.PathLike` or `List[os.PathLike]` or `dict` or `List[dict]`):
+            Can be either:
+
+                - A string, the *model id* (for example `google/ddpm-celebahq-256`) of a pretrained model hosted on
+                  the Hub.
+                - A path to a *directory* (for example `./my_model_directory`) containing the model weights saved
+                  with [`ModelMixin.save_pretrained`].
+                - A [torch state
+                  dict](https://pytorch.org/tutorials/beginner/saving_loading_models.html#what-is-a-state-dict).
+        subfolder (`str` or `List[str]`):
+            The subfolder location of a model file within a larger model repository on the Hub or locally.
+            If a list is passed, it should have the same length as `weight_name`.
+        weight_name (`str` or `List[str]`):
+            The name of the weight file to load. If a list is passed, it should have the same length as
+            `weight_name`.
+        image_encoder_folder (`str`, *optional*, defaults to `image_encoder`):
+            The subfolder location of the image encoder within a larger model repository on the Hub or locally.
+            Pass `None` to not load the image encoder. If the image encoder is located in a folder inside `subfolder`,
+            you only need to pass the name of the folder that contains image encoder weights, e.g. `image_encoder_folder="image_encoder"`.
+            If the image encoder is located in a folder other than `subfolder`, you should pass the path to the folder that contains image encoder weights,
+            for example, `image_encoder_folder="different_subfolder/image_encoder"`.
+    """
+
+    # handle the list inputs for multiple IP Adapters
+    if not isinstance(weight_name, list):
+        weight_name = [weight_name]
+
+    if not isinstance(pretrained_model_name_or_path_or_dict, list):
+        pretrained_model_name_or_path_or_dict = [pretrained_model_name_or_path_or_dict]
+    if len(pretrained_model_name_or_path_or_dict) == 1:
+        pretrained_model_name_or_path_or_dict = (
+            pretrained_model_name_or_path_or_dict * len(weight_name)
+        )
+
+    if not isinstance(subfolder, list):
+        subfolder = [subfolder]
+    if len(subfolder) == 1:
+        subfolder = subfolder * len(weight_name)
+
+    if len(weight_name) != len(pretrained_model_name_or_path_or_dict):
+        raise ValueError(
+            "`weight_name` and `pretrained_model_name_or_path_or_dict` must have the same length."
+        )
+
+    if len(weight_name) != len(subfolder):
+        raise ValueError("`weight_name` and `subfolder` must have the same length.")
+
+    # Load the main state dict first.
+    cache_dir = kwargs.pop("cache_dir", None)
+    force_download = kwargs.pop("force_download", False)
+    resume_download = kwargs.pop("resume_download", False)
+    proxies = kwargs.pop("proxies", None)
+    local_files_only = kwargs.pop("local_files_only", None)
+    token = kwargs.pop("token", None)
+    revision = kwargs.pop("revision", None)
+    low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", _LOW_CPU_MEM_USAGE_DEFAULT)
+
+    user_agent = {
+        "file_type": "attn_procs_weights",
+        "framework": "pytorch",
+    }
+    state_dicts = []
+    for pretrained_model_name_or_path_or_dict, weight_name, subfolder in zip(
+        pretrained_model_name_or_path_or_dict, weight_name, subfolder
+    ):
+        if not isinstance(pretrained_model_name_or_path_or_dict, dict):
+            model_file = _get_model_file(
+                pretrained_model_name_or_path_or_dict,
+                weights_name=weight_name,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                token=token,
+                revision=revision,
+                subfolder=subfolder,
+                user_agent=user_agent,
+            )
+            if weight_name.endswith(".safetensors"):
+                state_dict = {"image_proj": {}, "ip_adapter": {}}
+                with safe_open(model_file, framework="pt", device="cpu") as f:
+                    for key in f.keys():
+                        if key.startswith("image_proj."):
+                            state_dict["image_proj"][key.replace("image_proj.", "")] = (
+                                f.get_tensor(key)
+                            )
+                        elif key.startswith("ip_adapter."):
+                            state_dict["ip_adapter"][key.replace("ip_adapter.", "")] = (
+                                f.get_tensor(key)
+                            )
+            else:
+                state_dict = torch.load(model_file, map_location="cpu")
+        else:
+            state_dict = pretrained_model_name_or_path_or_dict
+
+        keys = list(state_dict.keys())
+        if keys != ["image_proj", "ip_adapter"]:
+            raise ValueError(
+                "Required keys are (`image_proj` and `ip_adapter`) missing from the state dict."
+            )
+
+        state_dicts.append(state_dict)
+
+        # load CLIP image encoder here if it has not been registered to the pipeline yet
+
+        if image_encoder_folder is not None:
+            if not isinstance(pretrained_model_name_or_path_or_dict, dict):
+                logger.info(
+                    f"loading image_encoder from {pretrained_model_name_or_path_or_dict}"
+                )
+                if image_encoder_folder.count("/") == 0:
+                    image_encoder_subfolder = Path(
+                        subfolder, image_encoder_folder
+                    ).as_posix()
+                else:
+                    image_encoder_subfolder = Path(image_encoder_folder).as_posix()
+
+                image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                    pretrained_model_name_or_path_or_dict,
+                    subfolder=image_encoder_subfolder,
+                    low_cpu_mem_usage=low_cpu_mem_usage,
+                )
+            else:
+                raise ValueError(
+                    "`image_encoder` cannot be loaded because `pretrained_model_name_or_path_or_dict` is a state dict."
+                )
+        else:
+            logger.warning(
+                "image_encoder is not loaded since `image_encoder_folder=None` passed. You will not be able to use `ip_adapter_image` when calling the pipeline with IP-Adapter."
+                "Use `ip_adapter_image_embeds` to pass pre-generated image embedding instead."
+            )
+
+    # create feature extractor if it has not been registered to the pipeline yet
+
+    feature_extractor = CLIPImageProcessor()
+
+    # load ip-adapter into unet
+    # unet = getattr(self, self.unet_name) if not hasattr(self, "unet") else self.unet
+    # unet._load_ip_adapter_weights(state_dicts, low_cpu_mem_usage=low_cpu_mem_usage)
+
+    return state_dicts, feature_extractor, image_encoder
+
+
 # @torchsnooper.snoop()
 def main():
     args = parse_args()
@@ -380,13 +543,36 @@ def main():
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision
     ).cuda()
-    unet = UNet2DConditionModel.from_pretrained(
+    unet: UNet2DConditionModel = UNet2DConditionModel.from_pretrained(
         args.resume_from_checkpoint, subfolder="unet", revision=None
     ).cuda()
 
+    # load ip-adapter
+    # from https://huggingface.co/h94/IP-Adapter/tree/main/models
+
+    state_dicts, feature_extractor, image_encoder = load_ip_adapter(
+        "h94/IP-Adapter",
+        subfolder=[
+            "models",
+        ],
+        weight_name=[
+            "ip-adapter_sd15.safetensors",
+        ],
+        image_encoder_folder="image_encoder",
+    )
+
+    unet._load_ip_adapter_weights(
+        state_dicts, low_cpu_mem_usage=_LOW_CPU_MEM_USAGE_DEFAULT
+    )
+    print(f'{colored("[√]", "green")} load ip_adapter into unet')
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
+
+    ### Newly Added
+    feature_extractor.requires_grad_(False)
+    image_encoder.requires_grad_(False)
+    ###
 
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
@@ -448,7 +634,9 @@ def main():
         truncation=True,
         return_tensors="pt",
     ).input_ids  # (b, 77)
-    encoder_hidden_states_nocond = text_encoder(inputs_nocond)[0].cuda()  # (b, 77, 768) 1024size로 나중에 rescale?
+    encoder_hidden_states_nocond = text_encoder(inputs_nocond)[
+        0
+    ].cuda()  # (b, 77, 768) 1024size로 나중에 rescale?
     print(
         f'{colored("[√]", "green")} encoder_hidden_states_nocond: {encoder_hidden_states_nocond.shape}.'
     )
@@ -689,13 +877,13 @@ def main():
         # merge
         pred_image_list_new = []
         for pred_image in pred_image_list:
-            '''
+            """
             pred_image = inpainting_merge_image(
                 Image.open(args.original_image),
                 Image.open(args.text_mask).convert("L"),
                 pred_image,
             )
-            '''
+            """
             pred_image_list_new.append(pred_image)
         pred_image_list = pred_image_list_new
 
