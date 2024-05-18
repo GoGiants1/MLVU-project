@@ -501,6 +501,8 @@ def encode_image(
 
 def prepare_ip_adapter_image_embeds(
     unet,
+    image_encoder,
+    feature_extractor,
     ip_adapter_image,  # masked_image
     ip_adapter_image_embeds,
     device,
@@ -522,6 +524,7 @@ def prepare_ip_adapter_image_embeds(
         ):
             output_hidden_state = not isinstance(image_proj_layer, ImageProjection)
             single_image_embeds, single_negative_image_embeds = encode_image(
+                image_encoder, feature_extractor,
                 single_ip_adapter_image, device, 1, output_hidden_state
             )
             single_image_embeds = torch.stack(
@@ -581,7 +584,8 @@ def main():
     print(f'{colored("[√]", "green")} Logging dir is set to {logging_dir}.')
 
     accelerator_project_config = ProjectConfiguration(
-        total_limit=args.checkpoints_total_limit
+        total_limit=args.checkpoints_total_limit,
+        logging_dir=logging_dir
     )
 
     accelerator = Accelerator(
@@ -678,8 +682,10 @@ def main():
     text_encoder.requires_grad_(False)
 
     ### Newly Added
-    feature_extractor.requires_grad_(False)
-    image_encoder.requires_grad_(False)
+    # feature_extractor.requires_grad_(False)
+    # image_encoder.requires_grad_(False)
+    # feature_extractor
+    image_encoder.to("cuda", torch.float32)
     ###
 
     # `accelerate` 0.16.0 will have better support for customized saving
@@ -761,27 +767,30 @@ def main():
     segmenter.eval()
     print(f'{colored("[√]", "green")} Text segmenter is successfully loaded.')
     image = Image.open(args.original_image).convert("RGB").resize((512, 512))
-
-    ip_adapter_image = None
+    print(image, image.size)
+    ip_adapter_image = image
 
     batch_size = 1
     num_images_per_prompt = 1
 
     image_embeds = prepare_ip_adapter_image_embeds(
         unet,
+        image_encoder,
+        feature_extractor,
         ip_adapter_image,
         None,
         "cuda",
         batch_size * num_images_per_prompt,
         True,
     )
+    print(image_embeds)
 
     added_cond_kwargs_cond = (
-        {"image_embeds": image_embeds[0]} if (ip_adapter_image is not None) else None
+        {"image_embeds": image_embeds} if (ip_adapter_image is not None) else None
     )
 
     added_cond_kwargs_uncond = (
-        {"image_embeds": image_embeds[1]} if (ip_adapter_image is not None) else None
+        {"image_embeds": image_embeds} if (ip_adapter_image is not None) else None
     )
 
     #### text-to-image ####
@@ -877,7 +886,7 @@ def main():
     #### text-inpainting ####
     if args.mode == "text-inpainting":
         text_mask = cv2.imread(args.text_mask)
-        threshold = 128
+        threshold = 50
         _, text_mask = cv2.threshold(text_mask, threshold, 255, cv2.THRESH_BINARY)
         text_mask = Image.fromarray(text_mask).convert("RGB").resize((256, 256))
         text_mask_tensor = (
