@@ -24,7 +24,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
 from datasets import disable_caching
-from huggingface_hub import HfFolder, Repository, create_repo, whoami
+from huggingface_hub import HfFolder, Repository, create_repo, hf_hub_download, whoami
 from model.layout_generator import get_layout_from_prompt
 from model.text_segmenter.unet import UNet
 from packaging import version
@@ -234,7 +234,7 @@ def parse_args():
     parser.add_argument(
         "--resume_from_checkpoint",
         type=str,
-        default=None,  # should be specified during inference
+        default="GoGiants1/td-unet15",  # should be specified during inference
         help=(
             "Whether training should be resumed from a previous checkpoint. Use a path saved by"
             ' `--checkpointing_steps`, or `"latest"` to automatically select the last available checkpoint.'
@@ -641,10 +641,15 @@ def main():
         f'{colored("[√]", "green")} encoder_hidden_states_nocond: {encoder_hidden_states_nocond.shape}.'
     )
 
+    character_segmenter_path = hf_hub_download(
+        "GoGiants1/td-unet15", "text_segmenter.pth", repo_type="model"
+    )
+    print(f'{colored("[√]", "green")} character_segmenter_path downloaded.')
+
     # load character-level segmenter
     segmenter = UNet(3, 96, True).cuda()
     segmenter = torch.nn.DataParallel(segmenter)
-    segmenter.load_state_dict(torch.load(args.character_segmenter_path))
+    segmenter.load_state_dict(torch.load(character_segmenter_path))
     segmenter.eval()
     print(f'{colored("[√]", "green")} Text segmenter is successfully loaded.')
 
