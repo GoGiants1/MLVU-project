@@ -1191,6 +1191,7 @@ class UNet2DConditionModel(
             image_embeds = added_cond_kwargs.get("image_embeds")
             image_embeds = self.encoder_hid_proj(image_embeds)
             encoder_hidden_states = (encoder_hidden_states, image_embeds)
+            print("IP-Adapter here! ", len(encoder_hidden_states), encoder_hidden_states[0].shape)
         return encoder_hidden_states
 
     def forward(
@@ -1270,7 +1271,9 @@ class UNet2DConditionModel(
         # upsample size should be forwarded when sample is not a multiple of `default_overall_up_factor`
         forward_upsample_size = False
         upsample_size = None
-
+        print("attention_mask: ", attention_mask)
+        print("added_cond_kwargs")
+        print("image_embeds_shape: ", added_cond_kwargs["image_embeds"][0].shape)
         for dim in sample.shape[-2:]:
             if dim % default_overall_up_factor != 0:
                 # Forward upsample size to force interpolation output size.
@@ -1332,7 +1335,8 @@ class UNet2DConditionModel(
 
         if self.time_embed_act is not None:
             emb = self.time_embed_act(emb)
-
+        
+        # Process encoder hidden state!!! for ip adapter and others
         encoder_hidden_states = self.process_encoder_hidden_states(
             encoder_hidden_states=encoder_hidden_states,
             added_cond_kwargs=added_cond_kwargs,
