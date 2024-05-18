@@ -58,6 +58,7 @@ from util import (
 import diffusers
 from diffusers import AutoencoderKL
 from diffusers.loaders import ip_adapter
+from diffusers.models import ImageProjection
 from diffusers.models.modeling_utils import _LOW_CPU_MEM_USAGE_DEFAULT, _get_model_file
 from diffusers.utils import check_min_version
 
@@ -459,6 +460,114 @@ def load_ip_adapter(
     return state_dicts, feature_extractor, image_encoder
 
 
+def encode_image(
+    image_encoder: CLIPVisionModelWithProjection,  # clip encoder
+    feature_extractor: CLIPImageProcessor,
+    image,
+    device,
+    num_images_per_prompt,
+    output_hidden_states=None,
+):
+    dtype = next(image_encoder.parameters()).dtype
+
+    if not isinstance(image, torch.Tensor):
+        image = feature_extractor(
+            image, return_tensors="pt"
+        ).pixel_values  # torch가 아니면 torch로 변환
+
+    image = image.to(device=device, dtype=dtype)
+    if output_hidden_states:
+        image_enc_hidden_states = image_encoder(
+            image, output_hidden_states=True
+        ).hidden_states[-2]
+        image_enc_hidden_states = image_enc_hidden_states.repeat_interleave(
+            num_images_per_prompt, dim=0
+        )
+        uncond_image_enc_hidden_states = image_encoder(
+            torch.zeros_like(image), output_hidden_states=True
+        ).hidden_states[-2]
+        uncond_image_enc_hidden_states = (
+            uncond_image_enc_hidden_states.repeat_interleave(
+                num_images_per_prompt, dim=0
+            )
+        )
+        return image_enc_hidden_states, uncond_image_enc_hidden_states
+    else:
+        image_embeds = image_encoder(image).image_embeds
+        image_embeds = image_embeds.repeat_interleave(num_images_per_prompt, dim=0)
+        uncond_image_embeds = torch.zeros_like(image_embeds)
+
+        return image_embeds, uncond_image_embeds
+
+
+def prepare_ip_adapter_image_embeds(
+    unet,
+    ip_adapter_image,  # masked_image
+    ip_adapter_image_embeds,
+    device,
+    num_images_per_prompt,
+    do_classifier_free_guidance,
+):
+    if ip_adapter_image_embeds is None:
+        if not isinstance(ip_adapter_image, list):
+            ip_adapter_image = [ip_adapter_image]
+
+        if len(ip_adapter_image) != len(unet.encoder_hid_proj.image_projection_layers):
+            raise ValueError(
+                f"`ip_adapter_image` must have same length as the number of IP Adapters. Got {len(ip_adapter_image)} images and {len(unet.encoder_hid_proj.image_projection_layers)} IP Adapters."
+            )
+
+        image_embeds = []
+        for single_ip_adapter_image, image_proj_layer in zip(
+            ip_adapter_image, unet.encoder_hid_proj.image_projection_layers
+        ):
+            output_hidden_state = not isinstance(image_proj_layer, ImageProjection)
+            single_image_embeds, single_negative_image_embeds = encode_image(
+                single_ip_adapter_image, device, 1, output_hidden_state
+            )
+            single_image_embeds = torch.stack(
+                [single_image_embeds] * num_images_per_prompt, dim=0
+            )
+            single_negative_image_embeds = torch.stack(
+                [single_negative_image_embeds] * num_images_per_prompt, dim=0
+            )
+
+            if do_classifier_free_guidance:
+                single_image_embeds = torch.cat(
+                    [single_negative_image_embeds, single_image_embeds]
+                )
+                single_image_embeds = single_image_embeds.to(device)
+
+            image_embeds.append(single_image_embeds)
+    else:
+        repeat_dims = [1]
+        image_embeds = []
+        for single_image_embeds in ip_adapter_image_embeds:
+            if do_classifier_free_guidance:
+                single_negative_image_embeds, single_image_embeds = (
+                    single_image_embeds.chunk(2)
+                )
+                single_image_embeds = single_image_embeds.repeat(
+                    num_images_per_prompt,
+                    *(repeat_dims * len(single_image_embeds.shape[1:])),
+                )
+                single_negative_image_embeds = single_negative_image_embeds.repeat(
+                    num_images_per_prompt,
+                    *(repeat_dims * len(single_negative_image_embeds.shape[1:])),
+                )
+                single_image_embeds = torch.cat(
+                    [single_negative_image_embeds, single_image_embeds]
+                )
+            else:
+                single_image_embeds = single_image_embeds.repeat(
+                    num_images_per_prompt,
+                    *(repeat_dims * len(single_image_embeds.shape[1:])),
+                )
+            image_embeds.append(single_image_embeds)
+
+    return image_embeds
+
+
 # @torchsnooper.snoop()
 def main():
     args = parse_args()
@@ -652,6 +761,31 @@ def main():
     segmenter.load_state_dict(torch.load(character_segmenter_path))
     segmenter.eval()
     print(f'{colored("[√]", "green")} Text segmenter is successfully loaded.')
+    image = Image.open(args.original_image).convert("RGB").resize((512, 512))
+
+    ip_adapter_image = None
+
+    batch_size = 1
+    num_images_per_prompt = 1
+
+    image_embeds = prepare_ip_adapter_image_embeds(
+        unet,
+        ip_adapter_image,
+        None,
+        "cuda",
+        batch_size * num_images_per_prompt,
+        True,
+    )
+
+
+
+    added_cond_kwargs_cond = (
+        {"image_embeds": image_embeds[0]} if (ip_adapter_image is not None) else None
+    )
+
+    added_cond_kwargs_uncond = (
+        {"image_embeds": image_embeds[1]} if (ip_adapter_image is not None) else None
+    )
 
     #### text-to-image ####
     if args.mode == "text-to-image":
@@ -802,6 +936,7 @@ def main():
                 segmentation_mask=segmentation_mask,
                 feature_mask=feature_mask,
                 masked_feature=masked_feature,
+                added_cond_kwargs=added_cond_kwargs_cond,  # Added for IP-Adapter
             ).sample  # b, 4, 64, 64
             noise_pred_uncond = unet(
                 sample=input,
@@ -810,6 +945,7 @@ def main():
                 segmentation_mask=segmentation_mask,
                 feature_mask=feature_mask,
                 masked_feature=masked_feature,
+                added_cond_kwargs=added_cond_kwargs_uncond,  # Added for IP-Adapter
             ).sample  # b, 4, 64, 64
             noisy_residual = noise_pred_uncond + args.classifier_free_scale * (
                 noise_pred_cond - noise_pred_uncond
