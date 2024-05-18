@@ -7,6 +7,7 @@ import numpy as np
 import PIL
 import torch
 from huggingface_hub import hf_hub_download
+from matplotlib import pyplot as plt
 from tqdm import tqdm
 
 from hi_sam.models.auto_mask_generator import AutoMaskGenerator
@@ -137,6 +138,40 @@ def unload_model(amg: AutoMaskGenerator):
         amg.model.cpu()
     empty_cuda_cache()
     return amg
+
+
+def show_mask(mask, ax, random_color=False, color=None):
+    if random_color:
+        color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
+    else:
+        color = (
+            color
+            if color is not None
+            else np.array([30 / 255, 144 / 255, 255 / 255, 0.5])
+        )
+    h, w = mask.shape[-2:]
+    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+    ax.imshow(mask_image)
+
+
+def show_masks(masks, filename, image):
+    plt.figure(figsize=(15, 15))
+    plt.imshow(image)
+    for i, mask in enumerate(masks):
+        mask = mask[0].astype(np.uint8)
+        # contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        # for cont in contours:
+        #     epsilon = 0.002 * cv2.arcLength(cont, True)
+        #     approx = cv2.approxPolyDP(cont, epsilon, True)
+        #     pts = approx.reshape((-1, 2))
+        #     if pts.shape[0] < 4:
+        #         continue
+        #     pts = pts.astype(np.int32)
+        #     mask = cv2.fillPoly(np.zeros(mask.shape), [pts], 1)
+        show_mask(mask, plt.gca(), random_color=True)
+    plt.axis("off")
+    plt.savefig(filename, bbox_inches="tight", pad_inches=0)
+    plt.close()
 
 
 def run_text_detection(
