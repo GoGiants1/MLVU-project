@@ -14,13 +14,21 @@
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Union
 
+import cv2
+import numpy as np
 import torch
+from huggingface_hub import hf_hub_download
 from packaging import version
+from regex import P
 from t_diffusers.callbacks import (
     MultiPipelineCallbacks,
     PipelineCallback,
 )
-from t_diffusers.unet_2d_condition import UNet2DConditionModel
+from t_diffusers.unet_2d_condition import (
+    UNet2DConditionModel,
+)
+
+# use our own UNet2DConditionModel
 from transformers import (
     CLIPImageProcessor,
     CLIPTextModel,
@@ -55,6 +63,8 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 from diffusers.utils.torch_utils import randn_tensor
+from text_diffuser.model.text_segmenter.unet import UNet
+from text_diffuser.util import filter_segmentation_mask
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -198,8 +208,13 @@ class StableDiffusionPipeline(
             A `CLIPImageProcessor` to extract features from generated images; used as inputs to the `safety_checker`.
     """
 
-    model_cpu_offload_seq = "text_encoder->image_encoder->unet->vae"
-    _optional_components = ["safety_checker", "feature_extractor", "image_encoder"]
+    model_cpu_offload_seq = "segmenter->text_encoder->image_encoder->unet->vae"
+    _optional_components = [
+        "safety_checker",
+        "feature_extractor",
+        "image_encoder",
+        "segmenter",
+    ]
     _exclude_from_cpu_offload = ["safety_checker"]
     _callback_tensor_inputs = ["latents", "prompt_embeds", "negative_prompt_embeds"]
 
@@ -299,6 +314,14 @@ class StableDiffusionPipeline(
             new_config["sample_size"] = 64
             unet._internal_dict = FrozenDict(new_config)
 
+        print("Downloading text_segmenter.pth...")
+        character_segmenter_path = hf_hub_download(
+            "GoGiants1/td-unet15", "text_segmenter.pth", repo_type="model"
+        )
+        segmenter = UNet(3, 96, True).cuda()
+        self.segmenter = torch.nn.DataParallel(segmenter)
+        self.segmenter.load_state_dict(torch.load(character_segmenter_path))
+        self.segmenter.eval()
         self.register_modules(
             vae=vae,
             text_encoder=text_encoder,
@@ -311,6 +334,12 @@ class StableDiffusionPipeline(
         )
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
+        self.mask_processor = VaeImageProcessor(
+            vae_scale_factor=self.vae_scale_factor,
+            do_normalize=False,
+            do_binarize=True,
+            do_convert_grayscale=True,
+        )
         self.register_to_config(requires_safety_checker=requires_safety_checker)
 
     def _encode_prompt(
@@ -880,6 +909,8 @@ class StableDiffusionPipeline(
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
         self,
+        image: PipelineImageInput,
+        text_mask_image: PipelineImageInput,
         prompt: Union[str, List[str]] = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
@@ -1049,7 +1080,102 @@ class StableDiffusionPipeline(
         else:
             batch_size = prompt_embeds.shape[0]
 
+        sample_num = batch_size * num_images_per_prompt
         device = self._execution_device
+        dtype = self.unet.dtype
+
+        ##### For Text Diff
+        # 1.1 Prepare text mask image
+        if text_mask_image is not None:
+            threshold = 50
+            _, text_mask = cv2.threshold(
+                text_mask_image, threshold, 255, cv2.THRESH_BINARY
+            )
+            text_mask = cv2.resize(
+                text_mask, (width, height), interpolation=cv2.INTER_NEAREST
+            )
+            # make textmask to RGB 3 channel
+            from PIL import Image
+            from torchvision.transforms import ToTensor
+
+            text_mask = Image.fromarray(text_mask).convert("RGB")
+
+            text_mask_tensor = (
+                ToTensor()(text_mask)
+                .unsqueeze()
+                .sub_(0.5)
+                .div_(0.5)
+                .to(device=device, dtype=dtype)
+            )
+
+        segmentation_mask: torch.Tensor = self.segmenter(text_mask_tensor)
+        segmentation_mask = segmentation_mask.max(1)[1].squeeze(0)
+        segmentation_mask = filter_segmentation_mask(segmentation_mask)
+        segmentation_mask = torch.nn.functional.interpolate(
+            segmentation_mask.unsqueeze(0).unsqueeze(0).to(dtype=dtype),
+            size=(width, height),
+            mode="nearest",
+        )
+
+        img = text_mask_image
+        img = cv2.resize(img, (width, height), interpolation=cv2.INTER_NEAREST)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # making the image mask for inpainting ?
+        _, binary = cv2.threshold(
+            gray, 250, 255, cv2.THRESH_BINARY
+        )  # pixel value is set to 0 or 255 according to the threshold
+        image_mask = 1 - (binary.astype(np.float32) / 255)
+        image_mask = torch.from_numpy(image_mask).cuda().unsqueeze(0).unsqueeze(0)
+
+        image = image.convert("RGB").resize((width, height))
+        image_tensor = (
+            ToTensor()(image)
+            .unsqueeze(0)
+            .to(device=self.device, dtype=self.dtype)
+            .sub_(0.5)
+            .div_(0.5)
+        )
+
+        # 1.2 prepare mask for inpainting
+
+        masked_image = image_tensor * (1 - image_mask)
+        masked_feature = (
+            self.vae.encode(masked_image)
+            .latent_dist.sample()
+            .repeat(sample_num, 1, 1, 1)
+        )
+
+        #### Original #####
+        # masked_feature = masked_feature * vae.config.scaling_factor
+        # masked_image = torch.zeros(sample_num, 3, 512, 512).to(
+        #     "cuda"
+        # )  # (b, 3, 512, 512)
+        # masked_feature = vae.encode(masked_image).latent_dist.sample()  # (b, 4, 64, 64)
+        # masked_feature = masked_feature * vae.config.scaling_factor
+
+        #####################
+
+        ##### Background #####
+
+        masked_image = torch.zeros(sample_num, 3, width, height).to(
+            device
+        )  # (b, 3, 512, 512)
+        masked_feature = self.vae.encode(
+            masked_image
+        ).latent_dist.sample()  # (b, 4, 64, 64)
+        masked_feature = masked_feature * self.vae.config.scaling_factor
+
+        image_mask = torch.nn.functional.interpolate(
+            image_mask, size=(width, height), mode="nearest"
+        ).repeat(sample_num, 1, 1, 1)
+
+        segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
+
+        # feature_mask = torch.nn.functional.interpolate(
+        #     image_mask, size=(64, 64), mode="nearest"
+        # ) # 원본
+
+        feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
 
         # 3. Encode input prompt
         lora_scale = (
@@ -1126,6 +1252,10 @@ class StableDiffusionPipeline(
         # 7. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
+
+        feature_mask = torch.cat([feature_mask] * 2, dim=0)
+        masked_feature = torch.cat([masked_feature] * 2, dim=0)
+        segmentation_mask = torch.cat([segmentation_mask] * 2, dim=0)
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 if self.interrupt:
@@ -1137,6 +1267,7 @@ class StableDiffusionPipeline(
                     if self.do_classifier_free_guidance
                     else latents
                 )
+
                 latent_model_input = self.scheduler.scale_model_input(
                     latent_model_input, t
                 )
@@ -1149,6 +1280,11 @@ class StableDiffusionPipeline(
                     timestep_cond=timestep_cond,
                     cross_attention_kwargs=self.cross_attention_kwargs,
                     added_cond_kwargs=added_cond_kwargs,
+                    #### ADDED####
+                    segmentation_mask=segmentation_mask,
+                    feature_mask=feature_mask,
+                    masked_feature=masked_feature,
+                    ##############
                     return_dict=False,
                 )[0]
 
