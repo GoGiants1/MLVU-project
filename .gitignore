@@ -2,3 +2,4 @@
 *.jpg
 *.png
 *.pyc
+text_diffuser/output/*
