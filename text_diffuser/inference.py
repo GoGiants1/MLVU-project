@@ -910,19 +910,26 @@ def main():
         image_tensor = (
             transforms.ToTensor()(image).unsqueeze(0).cuda().sub_(0.5).div_(0.5)
         )
-        masked_image = image_tensor * (1 - image_mask)
-        masked_feature = (
-            vae.encode(masked_image).latent_dist.sample().repeat(sample_num, 1, 1, 1)
-        )
+        # masked_image = image_tensor * (1 - image_mask)
+        # masked_feature = (
+        #     vae.encode(masked_image).latent_dist.sample().repeat(sample_num, 1, 1, 1)
+        # )
+        # masked_feature = masked_feature * vae.config.scaling_factor
+        masked_image = torch.zeros(sample_num, 3, 512, 512).to(
+            "cuda"
+        )  # (b, 3, 512, 512)
+        masked_feature = vae.encode(masked_image).latent_dist.sample()  # (b, 4, 64, 64)
         masked_feature = masked_feature * vae.config.scaling_factor
 
         image_mask = torch.nn.functional.interpolate(
             image_mask, size=(256, 256), mode="nearest"
         ).repeat(sample_num, 1, 1, 1)
         segmentation_mask = segmentation_mask * image_mask
-        feature_mask = torch.nn.functional.interpolate(
-            image_mask, size=(64, 64), mode="nearest"
-        )
+        # feature_mask = torch.nn.functional.interpolate(
+        #     image_mask, size=(64, 64), mode="nearest"
+        # )
+        feature_mask = torch.ones(sample_num, 1, 64, 64).to("cuda")  # (b, 1, 64, 64)
+
         print(f'{colored("[√]", "green")} feature_mask: {feature_mask.shape}.')
         print(
             f'{colored("[√]", "green")} segmentation_mask: {segmentation_mask.shape}.'
