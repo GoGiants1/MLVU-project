@@ -1271,9 +1271,6 @@ class UNet2DConditionModel(
         # upsample size should be forwarded when sample is not a multiple of `default_overall_up_factor`
         forward_upsample_size = False
         upsample_size = None
-        print("attention_mask: ", attention_mask)
-        print("added_cond_kwargs")
-        print("image_embeds_shape: ", added_cond_kwargs["image_embeds"][0].shape)
         for dim in sample.shape[-2:]:
             if dim % default_overall_up_factor != 0:
                 # Forward upsample size to force interpolation output size.
@@ -1295,9 +1292,10 @@ class UNet2DConditionModel(
             #       (keep = +0,     discard = -10000.0)
             attention_mask = (1 - attention_mask.to(sample.dtype)) * -10000.0
             attention_mask = attention_mask.unsqueeze(1)
-
+        
         # 0. concat all the feature together (Seg mask, masked feature.)
         sample = torch.cat([sample, feature_mask, masked_feature], dim=1)
+        print(sample.shape)
 
         # convert encoder_attention_mask to a bias the same way we do for attention_mask
         if encoder_attention_mask is not None:
@@ -1321,26 +1319,27 @@ class UNet2DConditionModel(
                 emb = torch.cat([emb, class_emb], dim=-1)
             else:
                 emb = emb + class_emb
+        # if added_cond_kwargs is not None:
+        #     aug_emb = self.get_aug_embed(
+        #         emb=emb,
+        #         encoder_hidden_states=encoder_hidden_states,
+        #         added_cond_kwargs=added_cond_kwargs,
+        #     )
+        #     if self.config.addition_embed_type == "image_hint":
+        #         aug_emb, hint = aug_emb
+        #         sample = torch.cat([sample, hint], dim=1)
 
-        aug_emb = self.get_aug_embed(
-            emb=emb,
-            encoder_hidden_states=encoder_hidden_states,
-            added_cond_kwargs=added_cond_kwargs,
-        )
-        if self.config.addition_embed_type == "image_hint":
-            aug_emb, hint = aug_emb
-            sample = torch.cat([sample, hint], dim=1)
-
-        emb = emb + aug_emb if aug_emb is not None else emb
+        #     emb = emb + aug_emb if aug_emb is not None else emb
 
         if self.time_embed_act is not None:
             emb = self.time_embed_act(emb)
         
         # Process encoder hidden state!!! for ip adapter and others
-        encoder_hidden_states = self.process_encoder_hidden_states(
-            encoder_hidden_states=encoder_hidden_states,
-            added_cond_kwargs=added_cond_kwargs,
-        )
+        if added_cond_kwargs is not None:
+            encoder_hidden_states = self.process_encoder_hidden_states(
+                encoder_hidden_states=encoder_hidden_states,
+                added_cond_kwargs=added_cond_kwargs,
+            )
 
         # 2. pre-process
         segmentation_mask_embedding = self.word_embedding(

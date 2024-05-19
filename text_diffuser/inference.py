@@ -53,6 +53,7 @@ from util import (
     make_caption_pil,
     segmentation_mask_visualization,
     transform_mask,
+    inpainting_merge_image
 )
 
 import diffusers
@@ -783,15 +784,12 @@ def main():
         batch_size * num_images_per_prompt,
         True,
     )
-    print(image_embeds)
 
     added_cond_kwargs_cond = (
         {"image_embeds": image_embeds} if (ip_adapter_image is not None) else None
     )
 
-    added_cond_kwargs_uncond = (
-        {"image_embeds": image_embeds} if (ip_adapter_image is not None) else None
-    )
+ 
 
     #### text-to-image ####
     if args.mode == "text-to-image":
@@ -940,10 +938,19 @@ def main():
 
     # diffusion process
     intermediate_images = []
+    
+    feature_mask = torch.cat([feature_mask]*2)
+    masked_feature = torch.cat([masked_feature]*2)
+    segmentation_mask = torch.cat([segmentation_mask]*2)
+    encoder_hidden_states = torch.cat([encoder_hidden_states]*2)
     for t in tqdm(scheduler.timesteps):
         with torch.no_grad():
-            noise_pred_cond = unet(
-                sample=input,
+            latent_model_input = torch.cat([input] * 2)        
+            latent_model_input = scheduler.scale_model_input(
+                    latent_model_input, t
+                )
+            noise_pred = unet(
+                sample=latent_model_input,
                 timestep=t,
                 encoder_hidden_states=encoder_hidden_states,
                 segmentation_mask=segmentation_mask,
@@ -951,21 +958,13 @@ def main():
                 masked_feature=masked_feature,
                 added_cond_kwargs=added_cond_kwargs_cond,  # Added for IP-Adapter
             ).sample  # b, 4, 64, 64
-            noise_pred_uncond = unet(
-                sample=input,
-                timestep=t,
-                encoder_hidden_states=encoder_hidden_states_nocond,
-                segmentation_mask=segmentation_mask,
-                feature_mask=feature_mask,
-                masked_feature=masked_feature,
-                added_cond_kwargs=added_cond_kwargs_uncond,  # Added for IP-Adapter
-            ).sample  # b, 4, 64, 64
+        
+            noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
             noisy_residual = noise_pred_uncond + args.classifier_free_scale * (
                 noise_pred_cond - noise_pred_uncond
             )  # b, 4, 64, 64
-            prev_noisy_sample = scheduler.step(noisy_residual, t, input).prev_sample
-            input = prev_noisy_sample
-            intermediate_images.append(prev_noisy_sample)
+            input = scheduler.step(noisy_residual, t, input, return_dict=False)[0] 
+            intermediate_images.append(input)
 
     # decode and visualization
     input = 1 / vae.config.scaling_factor * input
@@ -1031,13 +1030,13 @@ def main():
         # merge
         pred_image_list_new = []
         for pred_image in pred_image_list:
-            """
+            '''
             pred_image = inpainting_merge_image(
                 Image.open(args.original_image),
                 Image.open(args.text_mask).convert("L"),
                 pred_image,
             )
-            """
+            '''
             pred_image_list_new.append(pred_image)
         pred_image_list = pred_image_list_new
 
