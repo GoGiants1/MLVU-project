@@ -1319,17 +1319,17 @@ class UNet2DConditionModel(
                 emb = torch.cat([emb, class_emb], dim=-1)
             else:
                 emb = emb + class_emb
-        # if added_cond_kwargs is not None:
-        #     aug_emb = self.get_aug_embed(
-        #         emb=emb,
-        #         encoder_hidden_states=encoder_hidden_states,
-        #         added_cond_kwargs=added_cond_kwargs,
-        #     )
-        #     if self.config.addition_embed_type == "image_hint":
-        #         aug_emb, hint = aug_emb
-        #         sample = torch.cat([sample, hint], dim=1)
+        if added_cond_kwargs is not None:
+            aug_emb = self.get_aug_embed(
+                emb=emb,
+                encoder_hidden_states=encoder_hidden_states,
+                added_cond_kwargs=added_cond_kwargs,
+            )
+            if self.config.addition_embed_type == "image_hint":
+                aug_emb, hint = aug_emb
+                sample = torch.cat([sample, hint], dim=1)
 
-        #     emb = emb + aug_emb if aug_emb is not None else emb
+            emb = emb + aug_emb if aug_emb is not None else emb
 
         if self.time_embed_act is not None:
             emb = self.time_embed_act(emb)
