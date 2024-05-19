@@ -909,7 +909,7 @@ class StableDiffusionPipeline(
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
         self,
-        image: PipelineImageInput,
+        input_image: PipelineImageInput,
         text_mask_image: PipelineImageInput,
         prompt: Union[str, List[str]] = None,
         height: Optional[int] = None,
@@ -1127,7 +1127,7 @@ class StableDiffusionPipeline(
         image_mask = 1 - (binary.astype(np.float32) / 255)
         image_mask = torch.from_numpy(image_mask).cuda().unsqueeze(0).unsqueeze(0)
 
-        image = image.convert("RGB").resize((width, height))
+        image = input_image.convert("RGB").resize((width, height))
         image_tensor = (
             ToTensor()(image)
             .unsqueeze(0)

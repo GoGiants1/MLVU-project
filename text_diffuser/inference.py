@@ -524,8 +524,12 @@ def prepare_ip_adapter_image_embeds(
         ):
             output_hidden_state = not isinstance(image_proj_layer, ImageProjection)
             single_image_embeds, single_negative_image_embeds = encode_image(
-                image_encoder, feature_extractor,
-                single_ip_adapter_image, device, 1, output_hidden_state
+                image_encoder,
+                feature_extractor,
+                single_ip_adapter_image,
+                device,
+                1,
+                output_hidden_state,
             )
             single_image_embeds = torch.stack(
                 [single_image_embeds] * num_images_per_prompt, dim=0
@@ -584,8 +588,7 @@ def main():
     print(f'{colored("[√]", "green")} Logging dir is set to {logging_dir}.')
 
     accelerator_project_config = ProjectConfiguration(
-        total_limit=args.checkpoints_total_limit,
-        logging_dir=logging_dir
+        total_limit=args.checkpoints_total_limit, logging_dir=logging_dir
     )
 
     accelerator = Accelerator(
