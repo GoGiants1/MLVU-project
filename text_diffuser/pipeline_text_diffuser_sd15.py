@@ -63,8 +63,8 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 from diffusers.utils.torch_utils import randn_tensor
-from text_diffuser.model.text_segmenter.unet import UNet
-from text_diffuser.util import filter_segmentation_mask
+from model.text_segmenter.unet import UNet
+from util import filter_segmentation_mask
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -1102,7 +1102,7 @@ class StableDiffusionPipeline(
 
             text_mask_tensor = (
                 ToTensor()(text_mask)
-                .unsqueeze()
+                .unsqueeze(0)
                 .sub_(0.5)
                 .div_(0.5)
                 .to(device=device, dtype=dtype)
@@ -1113,7 +1113,7 @@ class StableDiffusionPipeline(
         segmentation_mask = filter_segmentation_mask(segmentation_mask)
         segmentation_mask = torch.nn.functional.interpolate(
             segmentation_mask.unsqueeze(0).unsqueeze(0).to(dtype=dtype),
-            size=(width, height),
+            size=(256, 256), # TODO: Why 256?
             mode="nearest",
         )
 
@@ -1125,15 +1125,15 @@ class StableDiffusionPipeline(
             gray, 250, 255, cv2.THRESH_BINARY
         )  # pixel value is set to 0 or 255 according to the threshold
         image_mask = 1 - (binary.astype(np.float32) / 255)
-        image_mask = torch.from_numpy(image_mask).cuda().unsqueeze(0).unsqueeze(0)
+        image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
 
         image = input_image.convert("RGB").resize((width, height))
         image_tensor = (
             ToTensor()(image)
             .unsqueeze(0)
-            .to(device=self.device, dtype=self.dtype)
             .sub_(0.5)
             .div_(0.5)
+            .to(device=device, dtype=dtype)
         )
 
         # 1.2 prepare mask for inpainting
@@ -1165,8 +1165,9 @@ class StableDiffusionPipeline(
         ).latent_dist.sample()  # (b, 4, 64, 64)
         masked_feature = masked_feature * self.vae.config.scaling_factor
 
+        # TODO: Hard coded for 256x256
         image_mask = torch.nn.functional.interpolate(
-            image_mask, size=(width, height), mode="nearest"
+            image_mask, size=(256, 256), mode="nearest"
         ).repeat(sample_num, 1, 1, 1)
 
         segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
@@ -1217,10 +1218,11 @@ class StableDiffusionPipeline(
         )
 
         # 5. Prepare latent variables
-        num_channels_latents = self.unet.config.in_channels
+        # num_channels_latents = self.unet.config.in_channels ## 원본
+        num_channels_latents = 4
         latents = self.prepare_latents(
             batch_size * num_images_per_prompt,
-            num_channels_latents,
+            4, #FIXME: Hardcoded...
             height,
             width,
             prompt_embeds.dtype,
@@ -1253,6 +1255,11 @@ class StableDiffusionPipeline(
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
 
+        print("latent shape", latents.shape)
+        print("prompt_embeds shape or enc hidden state", prompt_embeds.shape)
+        print("feature_mask shape", feature_mask.shape)
+        print("masked_feature shape", masked_feature.shape)
+        print("segmentation_mask shape", segmentation_mask.shape)
         feature_mask = torch.cat([feature_mask] * 2, dim=0)
         masked_feature = torch.cat([masked_feature] * 2, dim=0)
         segmentation_mask = torch.cat([segmentation_mask] * 2, dim=0)
