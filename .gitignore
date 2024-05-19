@@ -3,3 +3,6 @@
 *.png
 *.pyc
 text_diffuser/output/*
+text_diffuser/assets/*
+text_diffuser/textdiffuser-ckpt/*
+
