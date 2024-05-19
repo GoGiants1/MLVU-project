@@ -1,4 +1,5 @@
-pretrained_checkpoint 안에 hi_sam_h.pth 넣으시오  
+pretrained_checkpoint 안에 hi_sam_h.pth , sam_tts_h_hiertext.pth 를 넣으시오
+sample text 는 아직 한가지만 정할수 있음(예:bear) 
 
 input text prompt: change “sleeper” to “bear”
 위 Sleeper를  hi sam으로 따고 박스 마스킹을 한다. (이 때 하얀색 배경) (no text sttroke) 
