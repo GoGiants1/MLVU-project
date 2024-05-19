@@ -724,8 +724,8 @@ def main():
     sample_num = args.vis_num
     noise = torch.randn((sample_num, 4, 64, 64)).to("cuda")  # (b, 4, 64, 64)
     input = noise  # (b, 4, 64, 64)
-
-    captions = [args.prompt] * sample_num
+    scene_caption = args.prompt.split("'")[0]+args.prompt.split("'")[2]
+    captions = [scene_caption] * sample_num
     captions_nocond = [""] * sample_num
     print(f'{colored("[√]", "green")} Prompt is loaded: {args.prompt}.')
 
@@ -771,7 +771,7 @@ def main():
     print(image, image.size)
     ip_adapter_image = image
 
-    batch_size = 1
+    batch_size = args.vis_num
     num_images_per_prompt = 1
 
     image_embeds = prepare_ip_adapter_image_embeds(
@@ -942,10 +942,10 @@ def main():
     feature_mask = torch.cat([feature_mask]*2)
     masked_feature = torch.cat([masked_feature]*2)
     segmentation_mask = torch.cat([segmentation_mask]*2)
-    encoder_hidden_states = torch.cat([encoder_hidden_states]*2)
+    encoder_hidden_states = torch.cat([encoder_hidden_states,encoder_hidden_states_nocond])
     for t in tqdm(scheduler.timesteps):
         with torch.no_grad():
-            latent_model_input = torch.cat([input] * 2)        
+            latent_model_input = torch.cat([input]*2)        
             latent_model_input = scheduler.scale_model_input(
                     latent_model_input, t
                 )
