@@ -24,13 +24,13 @@ attn_map_raws = []
 for step in steps:
     attn_map_name_wo_ext = f"attn_map_raw_{style_name}_src_{src_name}_tgt_{tgt_name}_activate_layer_(0, 0)(108, 140)_attn_map_step_{step}_seed_{seed}"  # new
 
-    if saved_dtype == 'uint8':
-        attn_map_name = attn_map_name_wo_ext + '_uint8.npy'
+    if saved_dtype == "uint8":
+        attn_map_name = attn_map_name_wo_ext + "_uint8.npy"
         attn_map_path = os.path.join(exp_dir, attn_map_name)
         attn_map_raws.append(np.load(attn_map_path, allow_pickle=True))
 
     else:
-        attn_map_name = attn_map_name_wo_ext + '.pt'
+        attn_map_name = attn_map_name_wo_ext + ".pt"
         attn_map_path = os.path.join(exp_dir, attn_map_name)
         attn_map_raws.append(torch.load(attn_map_path))
         print(attn_map_path)
@@ -46,7 +46,7 @@ print(len(keys))
 key = keys[0]
 
 ########################
-tgt_idx = 3 # indicating the location of generated images.
+tgt_idx = 3  # indicating the location of generated images.
 
 attn_map_paired_rgb_grid_name = f"{style_name}_src_{src_name}_tgt_{tgt_name}_scale_1.0_activate_layer_(0, 0)(108, 140)_seed_{seed}.png"
 
@@ -54,8 +54,12 @@ attn_map_paired_rgb_grid_path = os.path.join(exp_dir, attn_map_paired_rgb_grid_n
 print(attn_map_paired_rgb_grid_path)
 attn_map_paired_rgb_grid = Image.open(attn_map_paired_rgb_grid_path)
 
-attn_map_src_img = get_image(attn_map_paired_rgb_grid, row = 0, col = 0, image_size = 1024, grid_width = 10)
-attn_map_tgt_img = get_image(attn_map_paired_rgb_grid, row = 0, col = tgt_idx, image_size = 1024, grid_width = 10)
+attn_map_src_img = get_image(
+    attn_map_paired_rgb_grid, row=0, col=0, image_size=1024, grid_width=10
+)
+attn_map_tgt_img = get_image(
+    attn_map_paired_rgb_grid, row=0, col=tgt_idx, image_size=1024, grid_width=10
+)
 
 
 h, w = 256, 256
@@ -75,8 +79,8 @@ source_image = attn_map_src_img
 target_image = attn_map_tgt_img
 
 # resize
-source_image = source_image.resize((h, w))
-target_image = target_image.resize((h, w))
+source_image = source_image.resize((w, h))
+target_image = target_image.resize((w, h))
 
 # convert to numpy array
 source_image = np.array(source_image)
@@ -107,7 +111,7 @@ def on_click(x, y):
 
     print(x, y)
     # draw a point
-    canvas.fill_style = 'red'
+    canvas.fill_style = "red"
     canvas.fill_circle(x, y, 4)
 
     for step_i, step in enumerate(range(len(saved_attention_map_idx))):
@@ -127,7 +131,7 @@ def on_click(x, y):
 
             grid_idx = grid_x_idx + grid_y_idx * num_of_grid
 
-            attn_map = attn_map_raw[key][tgt_idx * 10:10 + tgt_idx * 10, grid_idx, :]
+            attn_map = attn_map_raw[key][tgt_idx * 10 : 10 + tgt_idx * 10, grid_idx, :]
 
             attn_map = attn_map.sum(dim=0)
 
@@ -137,10 +141,14 @@ def on_click(x, y):
             attn_map = attn_map.detach().cpu().numpy()
             # attn_map = attn_map / attn_map.max()
             # normalized_attn_map = attn_map
-            normalized_attn_map = (attn_map - attn_map.min()) / (attn_map.max() - attn_map.min() + 1e-8)
+            normalized_attn_map = (attn_map - attn_map.min()) / (
+                attn_map.max() - attn_map.min() + 1e-8
+            )
             normalized_attn_map = 1.0 - normalized_attn_map
 
-            heatmap = cv2.applyColorMap(np.uint8(255 * normalized_attn_map), cv2.COLORMAP_JET)
+            heatmap = cv2.applyColorMap(
+                np.uint8(255 * normalized_attn_map), cv2.COLORMAP_JET
+            )
             heatmap = cv2.resize(heatmap, (w, h))
 
             attn_map = normalized_attn_map * 255
