@@ -12,13 +12,17 @@ def hook_fn(name):
         if hasattr(module.processor, "attn_map"):
             attn_maps[name] = module.processor.attn_map
             del module.processor.attn_map
+        if hasattr(module.processor, "ip_attn_map"):
+            # dict{inference_step: ip_attn_map_list}
+            attn_maps[name] = module.processor.ip_attn_map
+            del module.processor.ip_attn_map
 
     return forward_hook
 
 
 def register_cross_attention_hook(unet):
     for name, module in unet.named_modules():
-        if name.split(".")[-1].startswith("attn2"):
+        if name.split(".")[-1].startswith("attn"):  # attn2에서 attn으로 변경해둔 상태.
             module.register_forward_hook(hook_fn(name))
 
     return unet
