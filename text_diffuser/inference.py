@@ -53,7 +53,6 @@ from util import (
     make_caption_pil,
     segmentation_mask_visualization,
     transform_mask,
-    inpainting_merge_image
 )
 
 import diffusers
@@ -792,7 +791,7 @@ def main():
         {"image_embeds": image_embeds} if (ip_adapter_image is not None) else None
     )
 
- 
+
 
     #### text-to-image ####
     if args.mode == "text-to-image":
@@ -941,14 +940,14 @@ def main():
 
     # diffusion process
     intermediate_images = []
-    
+
     feature_mask = torch.cat([feature_mask]*2)
     masked_feature = torch.cat([masked_feature]*2)
     segmentation_mask = torch.cat([segmentation_mask]*2)
     encoder_hidden_states = torch.cat([encoder_hidden_states,encoder_hidden_states_nocond])
     for t in tqdm(scheduler.timesteps):
         with torch.no_grad():
-            latent_model_input = torch.cat([input]*2)        
+            latent_model_input = torch.cat([input]*2)
             latent_model_input = scheduler.scale_model_input(
                     latent_model_input, t
                 )
@@ -961,12 +960,12 @@ def main():
                 masked_feature=masked_feature,
                 added_cond_kwargs=added_cond_kwargs_cond,  # Added for IP-Adapter
             ).sample  # b, 4, 64, 64
-        
+
             noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
             noisy_residual = noise_pred_uncond + args.classifier_free_scale * (
                 noise_pred_cond - noise_pred_uncond
             )  # b, 4, 64, 64
-            input = scheduler.step(noisy_residual, t, input, return_dict=False)[0] 
+            input = scheduler.step(noisy_residual, t, input, return_dict=False)[0]
             intermediate_images.append(input)
 
     # decode and visualization
