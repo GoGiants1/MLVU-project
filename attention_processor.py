@@ -1407,6 +1407,13 @@ class AttnProcessor2_0:
         *args,
         **kwargs,
     ) -> torch.FloatTensor:
+        if not hasattr(attn, "attn_map"):
+            setattr(attn, "attn_map", {})
+            setattr(attn, "inference_step", 0)
+            setattr(attn, "ip_attn_map", {})
+        else:
+            attn.inference_step += 1
+
         if len(args) > 0 or kwargs.get("scale", None) is not None:
             deprecation_message = "The `scale` argument is deprecated and will be ignored. Please remove it, as passing it will raise an error in the future. `scale` should directly be passed while calling the underlying pipeline component i.e., via `cross_attention_kwargs`."
             deprecate("scale", "1.0.0", deprecation_message)
@@ -1469,6 +1476,11 @@ class AttnProcessor2_0:
         hidden_states = F.scaled_dot_product_attention(
             query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
         )
+
+        with torch.no_grad():
+            self.attn_map[self.inference_step] = (
+                (query @ key.transpose(-1, -2).softmax(dim=-1)).clone().cpu().detach()
+            )
 
         hidden_states = hidden_states.transpose(1, 2).reshape(
             batch_size, -1, attn.heads * head_dim
@@ -2495,6 +2507,13 @@ class IPAdapterAttnProcessor(nn.Module):
         scale: float = 1.0,
         ip_adapter_masks: Optional[torch.FloatTensor] = None,
     ):
+        if not hasattr(attn, "attn_map"):
+            setattr(attn, "attn_map", {})
+            setattr(attn, "inference_step", 0)
+            setattr(attn, "ip_attn_map", {})
+        else:
+            attn.inference_step += 1
+
         residual = hidden_states
 
         # separate ip_hidden_states from encoder_hidden_states
@@ -2560,6 +2579,10 @@ class IPAdapterAttnProcessor(nn.Module):
         value = attn.head_to_batch_dim(value)
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
+
+        if attn.inference_step in self.attn_map_save_steps:
+            attn.attn_map[attn.inference_step] = attention_probs.clone().cpu().detach()
+
         hidden_states = torch.bmm(attention_probs, value)
         hidden_states = attn.batch_to_head_dim(hidden_states)
 
@@ -2590,6 +2613,15 @@ class IPAdapterAttnProcessor(nn.Module):
             ip_value = attn.head_to_batch_dim(ip_value)
 
             ip_attention_probs = attn.get_attention_scores(query, ip_key, None)
+
+            ####### ADD ATTENTION MAPS #######
+            if attn.inference_step not in attn.ip_attn_map:
+                attn.ip_attn_map[attn.inference_step] = []
+            attn.ip_attn_map[attn.inference_step].append(
+                ip_attention_probs.clone().cpu().detach()
+            )
+            ##################################
+
             current_ip_hidden_states = torch.bmm(ip_attention_probs, ip_value)
             current_ip_hidden_states = attn.batch_to_head_dim(current_ip_hidden_states)
 
@@ -2690,6 +2722,13 @@ class IPAdapterAttnProcessor2_0(torch.nn.Module):
         scale: float = 1.0,
         ip_adapter_masks: Optional[torch.FloatTensor] = None,
     ):
+        if not hasattr(attn, "attn_map"):
+            setattr(attn, "attn_map", {})
+            setattr(attn, "inference_step", 0)
+            setattr(attn, "ip_attn_map", {})
+        else:
+            attn.inference_step += 1
+
         residual = hidden_states
 
         # separate ip_hidden_states from encoder_hidden_states
@@ -2770,6 +2809,10 @@ class IPAdapterAttnProcessor2_0(torch.nn.Module):
         hidden_states = F.scaled_dot_product_attention(
             query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
         )
+        with torch.no_grad():
+            self.attn_map[self.inference_step] = (
+                (query @ key.transpose(-1, -2).softmax(dim=-1)).clone().cpu().detach()
+            )
 
         hidden_states = hidden_states.transpose(1, 2).reshape(
             batch_size, -1, attn.heads * head_dim
@@ -2809,7 +2852,16 @@ class IPAdapterAttnProcessor2_0(torch.nn.Module):
             current_ip_hidden_states = F.scaled_dot_product_attention(
                 query, ip_key, ip_value, attn_mask=None, dropout_p=0.0, is_causal=False
             )
+            if attn.inference_step not in self.ip_attn_map:
+                self.ip_attn_map[attn.inference_step] = []
 
+            with torch.no_grad():
+                self.ip_attn_map[self.inference_step].append(
+                    (query @ ip_key.transpose(-1, -2).softmax(dim=-1))
+                    .clone()
+                    .cpu()
+                    .detach()
+                )
             current_ip_hidden_states = current_ip_hidden_states.transpose(1, 2).reshape(
                 batch_size, -1, attn.heads * head_dim
             )
