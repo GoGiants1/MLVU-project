@@ -11,7 +11,7 @@ import logging
 import os
 import random
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Union
 
 import accelerate
 import cv2
@@ -24,7 +24,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
 from datasets import disable_caching
-from huggingface_hub import HfFolder, Repository, create_repo, whoami
+from huggingface_hub import HfFolder, Repository, create_repo, hf_hub_download, whoami
 from model.layout_generator import get_layout_from_prompt
 from model.text_segmenter.unet import UNet
 from packaging import version
@@ -33,6 +33,7 @@ from PIL import (
     ImageEnhance,
     ImageOps,
 )
+from safetensors import safe_open
 from t_diffusers.scheduling_ddpm import DDPMScheduler
 from t_diffusers.unet_2d_condition import UNet2DConditionModel
 
@@ -40,7 +41,12 @@ from t_diffusers.unet_2d_condition import UNet2DConditionModel
 from termcolor import colored
 from torchvision import transforms
 from tqdm.auto import tqdm
-from transformers import CLIPTextModel, CLIPTokenizer
+from transformers import (
+    CLIPImageProcessor,
+    CLIPTextModel,
+    CLIPTokenizer,
+    CLIPVisionModelWithProjection,
+)
 from util import (
     combine_image,
     filter_segmentation_mask,
@@ -51,12 +57,14 @@ from util import (
 
 import diffusers
 from diffusers import AutoencoderKL
+from diffusers.models import ImageProjection
+from diffusers.models.modeling_utils import _LOW_CPU_MEM_USAGE_DEFAULT, _get_model_file
 from diffusers.utils import check_min_version
 
 
-'''
+"""
 from diffusers.utils.import_utils import is_xformers_available
-'''
+"""
 
 disable_caching()
 check_min_version("0.15.0.dev0")
@@ -226,7 +234,7 @@ def parse_args():
     parser.add_argument(
         "--resume_from_checkpoint",
         type=str,
-        default=None,  # should be specified during inference
+        default="GoGiants1/td-unet15",  # should be specified during inference
         help=(
             "Whether training should be resumed from a previous checkpoint. Use a path saved by"
             ' `--checkpointing_steps`, or `"latest"` to automatically select the last available checkpoint.'
@@ -296,6 +304,276 @@ def get_full_repo_name(
         return f"{organization}/{model_id}"
 
 
+def load_ip_adapter(
+    pretrained_model_name_or_path_or_dict: Union[
+        str, List[str], Dict[str, torch.Tensor]
+    ],
+    subfolder: Union[str, List[str]],
+    weight_name: Union[str, List[str]],
+    image_encoder_folder: Optional[str] = "image_encoder",
+    **kwargs,
+):
+    """
+    Parameters:
+        pretrained_model_name_or_path_or_dict (`str` or `List[str]` or `os.PathLike` or `List[os.PathLike]` or `dict` or `List[dict]`):
+            Can be either:
+
+                - A string, the *model id* (for example `google/ddpm-celebahq-256`) of a pretrained model hosted on
+                  the Hub.
+                - A path to a *directory* (for example `./my_model_directory`) containing the model weights saved
+                  with [`ModelMixin.save_pretrained`].
+                - A [torch state
+                  dict](https://pytorch.org/tutorials/beginner/saving_loading_models.html#what-is-a-state-dict).
+        subfolder (`str` or `List[str]`):
+            The subfolder location of a model file within a larger model repository on the Hub or locally.
+            If a list is passed, it should have the same length as `weight_name`.
+        weight_name (`str` or `List[str]`):
+            The name of the weight file to load. If a list is passed, it should have the same length as
+            `weight_name`.
+        image_encoder_folder (`str`, *optional*, defaults to `image_encoder`):
+            The subfolder location of the image encoder within a larger model repository on the Hub or locally.
+            Pass `None` to not load the image encoder. If the image encoder is located in a folder inside `subfolder`,
+            you only need to pass the name of the folder that contains image encoder weights, e.g. `image_encoder_folder="image_encoder"`.
+            If the image encoder is located in a folder other than `subfolder`, you should pass the path to the folder that contains image encoder weights,
+            for example, `image_encoder_folder="different_subfolder/image_encoder"`.
+    """
+
+    # handle the list inputs for multiple IP Adapters
+    if not isinstance(weight_name, list):
+        weight_name = [weight_name]
+
+    if not isinstance(pretrained_model_name_or_path_or_dict, list):
+        pretrained_model_name_or_path_or_dict = [pretrained_model_name_or_path_or_dict]
+    if len(pretrained_model_name_or_path_or_dict) == 1:
+        pretrained_model_name_or_path_or_dict = (
+            pretrained_model_name_or_path_or_dict * len(weight_name)
+        )
+
+    if not isinstance(subfolder, list):
+        subfolder = [subfolder]
+    if len(subfolder) == 1:
+        subfolder = subfolder * len(weight_name)
+
+    if len(weight_name) != len(pretrained_model_name_or_path_or_dict):
+        raise ValueError(
+            "`weight_name` and `pretrained_model_name_or_path_or_dict` must have the same length."
+        )
+
+    if len(weight_name) != len(subfolder):
+        raise ValueError("`weight_name` and `subfolder` must have the same length.")
+
+    # Load the main state dict first.
+    cache_dir = kwargs.pop("cache_dir", None)
+    force_download = kwargs.pop("force_download", False)
+    resume_download = kwargs.pop("resume_download", False)
+    proxies = kwargs.pop("proxies", None)
+    local_files_only = kwargs.pop("local_files_only", None)
+    token = kwargs.pop("token", None)
+    revision = kwargs.pop("revision", None)
+    low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", _LOW_CPU_MEM_USAGE_DEFAULT)
+
+    user_agent = {
+        "file_type": "attn_procs_weights",
+        "framework": "pytorch",
+    }
+    state_dicts = []
+    for pretrained_model_name_or_path_or_dict, weight_name, subfolder in zip(
+        pretrained_model_name_or_path_or_dict, weight_name, subfolder
+    ):
+        if not isinstance(pretrained_model_name_or_path_or_dict, dict):
+            model_file = _get_model_file(
+                pretrained_model_name_or_path_or_dict,
+                weights_name=weight_name,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                token=token,
+                revision=revision,
+                subfolder=subfolder,
+                user_agent=user_agent,
+            )
+            if weight_name.endswith(".safetensors"):
+                state_dict = {"image_proj": {}, "ip_adapter": {}}
+                with safe_open(model_file, framework="pt", device="cpu") as f:
+                    for key in f.keys():
+                        if key.startswith("image_proj."):
+                            state_dict["image_proj"][key.replace("image_proj.", "")] = (
+                                f.get_tensor(key)
+                            )
+                        elif key.startswith("ip_adapter."):
+                            state_dict["ip_adapter"][key.replace("ip_adapter.", "")] = (
+                                f.get_tensor(key)
+                            )
+            else:
+                state_dict = torch.load(model_file, map_location="cpu")
+        else:
+            state_dict = pretrained_model_name_or_path_or_dict
+
+        keys = list(state_dict.keys())
+        if keys != ["image_proj", "ip_adapter"]:
+            raise ValueError(
+                "Required keys are (`image_proj` and `ip_adapter`) missing from the state dict."
+            )
+
+        state_dicts.append(state_dict)
+
+        # load CLIP image encoder here if it has not been registered to the pipeline yet
+
+        if image_encoder_folder is not None:
+            if not isinstance(pretrained_model_name_or_path_or_dict, dict):
+                logger.info(
+                    f"loading image_encoder from {pretrained_model_name_or_path_or_dict}"
+                )
+                if image_encoder_folder.count("/") == 0:
+                    image_encoder_subfolder = Path(
+                        subfolder, image_encoder_folder
+                    ).as_posix()
+                else:
+                    image_encoder_subfolder = Path(image_encoder_folder).as_posix()
+
+                image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                    pretrained_model_name_or_path_or_dict,
+                    subfolder=image_encoder_subfolder,
+                    low_cpu_mem_usage=low_cpu_mem_usage,
+                )
+            else:
+                raise ValueError(
+                    "`image_encoder` cannot be loaded because `pretrained_model_name_or_path_or_dict` is a state dict."
+                )
+        else:
+            logger.warning(
+                "image_encoder is not loaded since `image_encoder_folder=None` passed. You will not be able to use `ip_adapter_image` when calling the pipeline with IP-Adapter."
+                "Use `ip_adapter_image_embeds` to pass pre-generated image embedding instead."
+            )
+
+    # create feature extractor if it has not been registered to the pipeline yet
+
+    feature_extractor = CLIPImageProcessor()
+
+    # load ip-adapter into unet
+    # unet = getattr(self, self.unet_name) if not hasattr(self, "unet") else self.unet
+    # unet._load_ip_adapter_weights(state_dicts, low_cpu_mem_usage=low_cpu_mem_usage)
+
+    return state_dicts, feature_extractor, image_encoder
+
+
+def encode_image(
+    image_encoder: CLIPVisionModelWithProjection,  # clip encoder
+    feature_extractor: CLIPImageProcessor,
+    image,
+    device,
+    num_images_per_prompt,
+    output_hidden_states=None,
+):
+    dtype = next(image_encoder.parameters()).dtype
+
+    if not isinstance(image, torch.Tensor):
+        image = feature_extractor(
+            image, return_tensors="pt"
+        ).pixel_values  # torch가 아니면 torch로 변환
+
+    image = image.to(device=device, dtype=dtype)
+    if output_hidden_states:
+        image_enc_hidden_states = image_encoder(
+            image, output_hidden_states=True
+        ).hidden_states[-2]
+        image_enc_hidden_states = image_enc_hidden_states.repeat_interleave(
+            num_images_per_prompt, dim=0
+        )
+        uncond_image_enc_hidden_states = image_encoder(
+            torch.zeros_like(image), output_hidden_states=True
+        ).hidden_states[-2]
+        uncond_image_enc_hidden_states = (
+            uncond_image_enc_hidden_states.repeat_interleave(
+                num_images_per_prompt, dim=0
+            )
+        )
+        return image_enc_hidden_states, uncond_image_enc_hidden_states
+    else:
+        image_embeds = image_encoder(image).image_embeds
+        image_embeds = image_embeds.repeat_interleave(num_images_per_prompt, dim=0)
+        uncond_image_embeds = torch.zeros_like(image_embeds)
+
+        return image_embeds, uncond_image_embeds
+
+
+def prepare_ip_adapter_image_embeds(
+    unet,
+    image_encoder,
+    feature_extractor,
+    ip_adapter_image,  # masked_image
+    ip_adapter_image_embeds,
+    device,
+    num_images_per_prompt,
+    do_classifier_free_guidance,
+):
+    if ip_adapter_image_embeds is None:
+        if not isinstance(ip_adapter_image, list):
+            ip_adapter_image = [ip_adapter_image]
+
+        if len(ip_adapter_image) != len(unet.encoder_hid_proj.image_projection_layers):
+            raise ValueError(
+                f"`ip_adapter_image` must have same length as the number of IP Adapters. Got {len(ip_adapter_image)} images and {len(unet.encoder_hid_proj.image_projection_layers)} IP Adapters."
+            )
+
+        image_embeds = []
+        for single_ip_adapter_image, image_proj_layer in zip(
+            ip_adapter_image, unet.encoder_hid_proj.image_projection_layers
+        ):
+            output_hidden_state = not isinstance(image_proj_layer, ImageProjection)
+            single_image_embeds, single_negative_image_embeds = encode_image(
+                image_encoder,
+                feature_extractor,
+                single_ip_adapter_image,
+                device,
+                1,
+                output_hidden_state,
+            )
+            single_image_embeds = torch.stack(
+                [single_image_embeds] * num_images_per_prompt, dim=0
+            )
+            single_negative_image_embeds = torch.stack(
+                [single_negative_image_embeds] * num_images_per_prompt, dim=0
+            )
+
+            if do_classifier_free_guidance:
+                single_image_embeds = torch.cat(
+                    [single_negative_image_embeds, single_image_embeds]
+                )
+                single_image_embeds = single_image_embeds.to(device)
+
+            image_embeds.append(single_image_embeds)
+    else:
+        repeat_dims = [1]
+        image_embeds = []
+        for single_image_embeds in ip_adapter_image_embeds:
+            if do_classifier_free_guidance:
+                single_negative_image_embeds, single_image_embeds = (
+                    single_image_embeds.chunk(2)
+                )
+                single_image_embeds = single_image_embeds.repeat(
+                    num_images_per_prompt,
+                    *(repeat_dims * len(single_image_embeds.shape[1:])),
+                )
+                single_negative_image_embeds = single_negative_image_embeds.repeat(
+                    num_images_per_prompt,
+                    *(repeat_dims * len(single_negative_image_embeds.shape[1:])),
+                )
+                single_image_embeds = torch.cat(
+                    [single_negative_image_embeds, single_image_embeds]
+                )
+            else:
+                single_image_embeds = single_image_embeds.repeat(
+                    num_images_per_prompt,
+                    *(repeat_dims * len(single_image_embeds.shape[1:])),
+                )
+            image_embeds.append(single_image_embeds)
+
+    return image_embeds
+
+
 # @torchsnooper.snoop()
 def main():
     args = parse_args()
@@ -310,7 +588,7 @@ def main():
     print(f'{colored("[√]", "green")} Logging dir is set to {logging_dir}.')
 
     accelerator_project_config = ProjectConfiguration(
-        total_limit=args.checkpoints_total_limit
+        total_limit=args.checkpoints_total_limit, logging_dir=logging_dir
     )
 
     accelerator = Accelerator(
@@ -380,13 +658,38 @@ def main():
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision
     ).cuda()
-    unet = UNet2DConditionModel.from_pretrained(
+    unet: UNet2DConditionModel = UNet2DConditionModel.from_pretrained(
         args.resume_from_checkpoint, subfolder="unet", revision=None
     ).cuda()
 
+    # load ip-adapter
+    # from https://huggingface.co/h94/IP-Adapter/tree/main/models
+
+    state_dicts, feature_extractor, image_encoder = load_ip_adapter(
+        "h94/IP-Adapter",
+        subfolder=[
+            "models",
+        ],
+        weight_name=[
+            "ip-adapter_sd15.safetensors",
+        ],
+        image_encoder_folder="image_encoder",
+    )
+
+    unet._load_ip_adapter_weights(
+        state_dicts, low_cpu_mem_usage=_LOW_CPU_MEM_USAGE_DEFAULT
+    )
+    print(f'{colored("[√]", "green")} load ip_adapter into unet')
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
+
+    ### Newly Added
+    # feature_extractor.requires_grad_(False)
+    # image_encoder.requires_grad_(False)
+    # feature_extractor
+    image_encoder.to("cuda", torch.float32)
+    ###
 
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
@@ -423,8 +726,8 @@ def main():
     sample_num = args.vis_num
     noise = torch.randn((sample_num, 4, 64, 64)).to("cuda")  # (b, 4, 64, 64)
     input = noise  # (b, 4, 64, 64)
-
-    captions = [args.prompt] * sample_num
+    scene_caption = args.prompt.split("'")[0]+args.prompt.split("'")[2]
+    captions = [scene_caption] * sample_num
     captions_nocond = [""] * sample_num
     print(f'{colored("[√]", "green")} Prompt is loaded: {args.prompt}.')
 
@@ -448,17 +751,47 @@ def main():
         truncation=True,
         return_tensors="pt",
     ).input_ids  # (b, 77)
-    encoder_hidden_states_nocond = text_encoder(inputs_nocond)[0].cuda()  # (b, 77, 768) 1024size로 나중에 rescale?
+    encoder_hidden_states_nocond = text_encoder(inputs_nocond)[
+        0
+    ].cuda()  # (b, 77, 768) 1024size로 나중에 rescale?
     print(
         f'{colored("[√]", "green")} encoder_hidden_states_nocond: {encoder_hidden_states_nocond.shape}.'
     )
 
+    character_segmenter_path = hf_hub_download(
+        "GoGiants1/td-unet15", "text_segmenter.pth", repo_type="model"
+    )
+    print(f'{colored("[√]", "green")} character_segmenter_path downloaded.')
+
     # load character-level segmenter
     segmenter = UNet(3, 96, True).cuda()
     segmenter = torch.nn.DataParallel(segmenter)
-    segmenter.load_state_dict(torch.load(args.character_segmenter_path))
+    segmenter.load_state_dict(torch.load(character_segmenter_path))
     segmenter.eval()
     print(f'{colored("[√]", "green")} Text segmenter is successfully loaded.')
+    image = Image.open(args.original_image).convert("RGB").resize((512, 512))
+    print(image, image.size)
+    ip_adapter_image = image
+
+    batch_size = args.vis_num
+    num_images_per_prompt = 1
+
+    image_embeds = prepare_ip_adapter_image_embeds(
+        unet,
+        image_encoder,
+        feature_extractor,
+        ip_adapter_image,
+        None,
+        "cuda",
+        batch_size * num_images_per_prompt,
+        True,
+    )
+
+    added_cond_kwargs_cond = (
+        {"image_embeds": image_embeds} if (ip_adapter_image is not None) else None
+    )
+
+
 
     #### text-to-image ####
     if args.mode == "text-to-image":
@@ -553,7 +886,7 @@ def main():
     #### text-inpainting ####
     if args.mode == "text-inpainting":
         text_mask = cv2.imread(args.text_mask)
-        threshold = 128
+        threshold = 50
         _, text_mask = cv2.threshold(text_mask, threshold, 255, cv2.THRESH_BINARY)
         text_mask = Image.fromarray(text_mask).convert("RGB").resize((256, 256))
         text_mask_tensor = (
@@ -577,19 +910,26 @@ def main():
         image_tensor = (
             transforms.ToTensor()(image).unsqueeze(0).cuda().sub_(0.5).div_(0.5)
         )
-        masked_image = image_tensor * (1 - image_mask)
-        masked_feature = (
-            vae.encode(masked_image).latent_dist.sample().repeat(sample_num, 1, 1, 1)
-        )
+        # masked_image = image_tensor * (1 - image_mask)
+        # masked_feature = (
+        #     vae.encode(masked_image).latent_dist.sample().repeat(sample_num, 1, 1, 1)
+        # )
+        # masked_feature = masked_feature * vae.config.scaling_factor
+        masked_image = torch.zeros(sample_num, 3, 512, 512).to(
+            "cuda"
+        )  # (b, 3, 512, 512)
+        masked_feature = vae.encode(masked_image).latent_dist.sample()  # (b, 4, 64, 64)
         masked_feature = masked_feature * vae.config.scaling_factor
 
         image_mask = torch.nn.functional.interpolate(
             image_mask, size=(256, 256), mode="nearest"
         ).repeat(sample_num, 1, 1, 1)
         segmentation_mask = segmentation_mask * image_mask
-        feature_mask = torch.nn.functional.interpolate(
-            image_mask, size=(64, 64), mode="nearest"
-        )
+        # feature_mask = torch.nn.functional.interpolate(
+        #     image_mask, size=(64, 64), mode="nearest"
+        # )
+        feature_mask = torch.ones(sample_num, 1, 64, 64).to("cuda")  # (b, 1, 64, 64)
+
         print(f'{colored("[√]", "green")} feature_mask: {feature_mask.shape}.')
         print(
             f'{colored("[√]", "green")} segmentation_mask: {segmentation_mask.shape}.'
@@ -600,30 +940,33 @@ def main():
 
     # diffusion process
     intermediate_images = []
+
+    feature_mask = torch.cat([feature_mask]*2)
+    masked_feature = torch.cat([masked_feature]*2)
+    segmentation_mask = torch.cat([segmentation_mask]*2)
+    encoder_hidden_states = torch.cat([encoder_hidden_states,encoder_hidden_states_nocond])
     for t in tqdm(scheduler.timesteps):
         with torch.no_grad():
-            noise_pred_cond = unet(
-                sample=input,
+            latent_model_input = torch.cat([input]*2)
+            latent_model_input = scheduler.scale_model_input(
+                    latent_model_input, t
+                )
+            noise_pred = unet(
+                sample=latent_model_input,
                 timestep=t,
                 encoder_hidden_states=encoder_hidden_states,
                 segmentation_mask=segmentation_mask,
                 feature_mask=feature_mask,
                 masked_feature=masked_feature,
+                added_cond_kwargs=added_cond_kwargs_cond,  # Added for IP-Adapter
             ).sample  # b, 4, 64, 64
-            noise_pred_uncond = unet(
-                sample=input,
-                timestep=t,
-                encoder_hidden_states=encoder_hidden_states_nocond,
-                segmentation_mask=segmentation_mask,
-                feature_mask=feature_mask,
-                masked_feature=masked_feature,
-            ).sample  # b, 4, 64, 64
+
+            noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
             noisy_residual = noise_pred_uncond + args.classifier_free_scale * (
                 noise_pred_cond - noise_pred_uncond
             )  # b, 4, 64, 64
-            prev_noisy_sample = scheduler.step(noisy_residual, t, input).prev_sample
-            input = prev_noisy_sample
-            intermediate_images.append(prev_noisy_sample)
+            input = scheduler.step(noisy_residual, t, input, return_dict=False)[0]
+            intermediate_images.append(input)
 
     # decode and visualization
     input = 1 / vae.config.scaling_factor * input

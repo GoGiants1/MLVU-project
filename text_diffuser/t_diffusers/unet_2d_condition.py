@@ -176,7 +176,7 @@ class UNet2DConditionModel(
     def __init__(
         self,
         sample_size: Optional[int] = None,
-        in_channels: int = 17,
+        in_channels: int = 17,  # TODO: Change This...
         out_channels: int = 4,
         center_input_sample: bool = False,
         flip_sin_to_cos: bool = True,
@@ -237,8 +237,12 @@ class UNet2DConditionModel(
         super().__init__()
 
         # char embedding layer
-        self.word_embedding = nn.Embedding(128, 8)
+        # 128개의 임베딩 만들고 각자 벡터 차원이 8인
+        self.word_embedding = nn.Embedding(
+            128, 8
+        )  # 최대 128개의 char(word)를 8개의 vector로 embedding(char인가 word인가?)
         # convolution layer
+        # input.shape = (batchsize, 8, 256 256)
         self.segmap_conv = nn.Sequential(
             nn.Conv2d(8, 32, 3, 1, 1),
             nn.ReLU(),
@@ -250,8 +254,9 @@ class UNet2DConditionModel(
             nn.MaxPool2d(2, 2),
             nn.Conv2d(64, 8, 3, 1, 1),
         )
+        # output.shape = (batchsize, 8, 64, 64)
 
-        self.sample_size = sample_size
+        self.sample_size = sample_size  # ?
 
         if num_attention_heads is not None:
             raise ValueError(
@@ -281,13 +286,13 @@ class UNet2DConditionModel(
         )
 
         # input
-        conv_in_padding = (conv_in_kernel - 1) // 2
+        conv_in_padding = (conv_in_kernel - 1) // 2  # ex) 3-1/2 = 1
         self.conv_in = nn.Conv2d(
             in_channels,  # the input channel is modified to 17 (4+8+1+4)s
-            block_out_channels[0],
-            kernel_size=conv_in_kernel,
-            padding=conv_in_padding,
-        )
+            block_out_channels[0],  # the output channel is 320
+            kernel_size=conv_in_kernel,  # the kernel size is 3
+            padding=conv_in_padding,  # the padding is 1
+        )  # the output size is (320, 64, 64)
 
         # time
         time_embed_dim, timestep_input_dim = self._set_time_proj(
@@ -377,7 +382,7 @@ class UNet2DConditionModel(
             blocks_time_embed_dim = time_embed_dim
 
         # down
-        output_channel = block_out_channels[0]
+        output_channel = block_out_channels[0]  # 320
         for i, down_block_type in enumerate(down_block_types):
             input_channel = output_channel
             output_channel = block_out_channels[i]
@@ -442,7 +447,7 @@ class UNet2DConditionModel(
         # count how many layers upsample the images
         self.num_upsamplers = 0
 
-        # up
+        # for up_blocks
         reversed_block_out_channels = list(reversed(block_out_channels))
         reversed_num_attention_heads = list(reversed(num_attention_heads))
         reversed_layers_per_block = list(reversed(layers_per_block))
@@ -456,7 +461,9 @@ class UNet2DConditionModel(
 
         output_channel = reversed_block_out_channels[0]
         for i, up_block_type in enumerate(up_block_types):
-            is_final_block = i == len(block_out_channels) - 1
+            is_final_block = (
+                i == len(block_out_channels) - 1
+            )  # if True it is final block
 
             prev_output_channel = output_channel
             output_channel = reversed_block_out_channels[i]
@@ -598,6 +605,7 @@ class UNet2DConditionModel(
                         "Must provide 'reverse_transformer_layers_per_block` if using asymmetrical UNet."
                     )
 
+    # positional encoding
     def _set_time_proj(
         self,
         time_embedding_type: str,
@@ -1183,6 +1191,7 @@ class UNet2DConditionModel(
             image_embeds = added_cond_kwargs.get("image_embeds")
             image_embeds = self.encoder_hid_proj(image_embeds)
             encoder_hidden_states = (encoder_hidden_states, image_embeds)
+            print("IP-Adapter here! ", len(encoder_hidden_states), encoder_hidden_states[0].shape)
         return encoder_hidden_states
 
     def forward(
@@ -1262,7 +1271,6 @@ class UNet2DConditionModel(
         # upsample size should be forwarded when sample is not a multiple of `default_overall_up_factor`
         forward_upsample_size = False
         upsample_size = None
-
         for dim in sample.shape[-2:]:
             if dim % default_overall_up_factor != 0:
                 # Forward upsample size to force interpolation output size.
@@ -1287,6 +1295,7 @@ class UNet2DConditionModel(
 
         # 0. concat all the feature together (Seg mask, masked feature.)
         sample = torch.cat([sample, feature_mask, masked_feature], dim=1)
+        print(sample.shape)
 
         # convert encoder_attention_mask to a bias the same way we do for attention_mask
         if encoder_attention_mask is not None:
@@ -1310,32 +1319,34 @@ class UNet2DConditionModel(
                 emb = torch.cat([emb, class_emb], dim=-1)
             else:
                 emb = emb + class_emb
+        if added_cond_kwargs is not None:
+            aug_emb = self.get_aug_embed(
+                emb=emb,
+                encoder_hidden_states=encoder_hidden_states,
+                added_cond_kwargs=added_cond_kwargs,
+            )
+            if self.config.addition_embed_type == "image_hint":
+                aug_emb, hint = aug_emb
+                sample = torch.cat([sample, hint], dim=1)
 
-        aug_emb = self.get_aug_embed(
-            emb=emb,
-            encoder_hidden_states=encoder_hidden_states,
-            added_cond_kwargs=added_cond_kwargs,
-        )
-        if self.config.addition_embed_type == "image_hint":
-            aug_emb, hint = aug_emb
-            sample = torch.cat([sample, hint], dim=1)
-
-        emb = emb + aug_emb if aug_emb is not None else emb
+            emb = emb + aug_emb if aug_emb is not None else emb
 
         if self.time_embed_act is not None:
             emb = self.time_embed_act(emb)
 
-        encoder_hidden_states = self.process_encoder_hidden_states(
-            encoder_hidden_states=encoder_hidden_states,
-            added_cond_kwargs=added_cond_kwargs,
-        )
+        # Process encoder hidden state!!! for ip adapter and others
+        if added_cond_kwargs is not None:
+            encoder_hidden_states = self.process_encoder_hidden_states(
+                encoder_hidden_states=encoder_hidden_states,
+                added_cond_kwargs=added_cond_kwargs,
+            )
 
         # 2. pre-process
         segmentation_mask_embedding = self.word_embedding(
             segmentation_mask.squeeze(1).long()
         ).permute(
             0, 3, 1, 2
-        )  # get 8-d embedding from character-level segmentation mask
+        )  # get 8-d embedding from character-level segmentation mask, with 128 indices
         segmentation_mask_embedding = self.segmap_conv(
             segmentation_mask_embedding
         )  # resize the mask using cnn to match the feature space
