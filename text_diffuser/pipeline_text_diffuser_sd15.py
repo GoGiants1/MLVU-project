@@ -18,8 +18,8 @@ import cv2
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
+from model.text_segmenter.unet import UNet
 from packaging import version
-from regex import P
 from t_diffusers.callbacks import (
     MultiPipelineCallbacks,
     PipelineCallback,
@@ -35,6 +35,7 @@ from transformers import (
     CLIPTokenizer,
     CLIPVisionModelWithProjection,
 )
+from util import filter_segmentation_mask
 
 from diffusers.configuration_utils import FrozenDict
 from diffusers.image_processor import PipelineImageInput, VaeImageProcessor
@@ -63,8 +64,6 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 from diffusers.utils.torch_utils import randn_tensor
-from model.text_segmenter.unet import UNet
-from util import filter_segmentation_mask
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

@@ -2,9 +2,9 @@ import gc
 import json
 import os
 
-import PIL
 import cv2
 import numpy as np
+import PIL
 import psutil
 import torch
 from PIL import Image
@@ -209,7 +209,7 @@ def torch_gc():
         if gpu.get("total", 1) > 1
         else 0
     )
-    
+
     if used > 90:
         print(f"GPU high memory utilization: {used}% {mem}")
 
@@ -222,7 +222,7 @@ def torch_gc():
         except Exception:
             print("CUDA garbage collection failed", exc_info=True)
             pass
-    
+
 
     print(
         f"gc: collected={collected} {memory_stats()}"

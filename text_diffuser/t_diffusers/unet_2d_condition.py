@@ -1292,7 +1292,7 @@ class UNet2DConditionModel(
             #       (keep = +0,     discard = -10000.0)
             attention_mask = (1 - attention_mask.to(sample.dtype)) * -10000.0
             attention_mask = attention_mask.unsqueeze(1)
-        
+
         # 0. concat all the feature together (Seg mask, masked feature.)
         sample = torch.cat([sample, feature_mask, masked_feature], dim=1)
         print(sample.shape)
@@ -1333,7 +1333,7 @@ class UNet2DConditionModel(
 
         if self.time_embed_act is not None:
             emb = self.time_embed_act(emb)
-        
+
         # Process encoder hidden state!!! for ip adapter and others
         if added_cond_kwargs is not None:
             encoder_hidden_states = self.process_encoder_hidden_states(

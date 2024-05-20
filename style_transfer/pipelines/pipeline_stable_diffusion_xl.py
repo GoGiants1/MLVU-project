@@ -37,7 +37,6 @@ from diffusers.models import AutoencoderKL, ImageProjection, UNet2DConditionMode
 from diffusers.models.attention_processor import (
     AttnProcessor2_0,
     FusedAttnProcessor2_0,
-    IPAdapterAttnProcessor2_0,
     LoRAAttnProcessor2_0,
     LoRAXFormersAttnProcessor,
     XFormersAttnProcessor,
@@ -61,9 +60,7 @@ from diffusers.utils import (
 from diffusers.utils.torch_utils import randn_tensor
 from pipelines.inverted_ve_pipeline import (
     ACTIVATE_LAYER_CANDIDATE,
-    AttnProcessor,
     CrossFrameAttnProcessor,
-    CrossFrameAttnProcessor2_0,
     SharedAttentionProcessor,
     SharedAttentionProcessor_v2,
 )
