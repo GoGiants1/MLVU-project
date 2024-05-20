@@ -11,6 +11,7 @@ import warnings
 
 import numpy as np
 import torch
+from huggingface_hub import hf_hub_download
 from model.layout_transformer import LayoutTransformer, TextConditioner
 from PIL import Image, ImageDraw, ImageFont
 from termcolor import colored
@@ -30,7 +31,14 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # import layout transformer
 model = LayoutTransformer().cuda().eval()
-model.load_state_dict(torch.load("textdiffuser-ckpt/layout_transformer.pth"))
+
+layout_transformer_path = hf_hub_download(
+    repo_id="GoGiants1/td-unet15",
+    filename="layout_transformer.pth",
+    repo_type="model",
+)
+
+model.load_state_dict(torch.load(layout_transformer_path))
 
 # import text encoder and tokenizer
 text_encoder = TextConditioner().cuda().eval()
@@ -193,6 +201,7 @@ def get_layout_from_prompt(args):
     padding = torch.zeros(1, 1, 4).cuda()
     boxes = boxes.unsqueeze(0).cuda()
     right_shifted_boxes = torch.cat([padding, boxes[:, 0:-1, :]], 1)  # (1, 8, 4)
+
     def getsize(font, text):
         left, top, right, bottom = font.getbbox(text)
         return right - left, bottom - top
@@ -260,7 +269,7 @@ def get_layout_from_prompt(args):
 
             # paint character-level segmentation masks
             # https://github.com/python-pillow/Pillow/issues/3921
-            _ , bottom_1 = getsize(font, text[i])
+            _, bottom_1 = getsize(font, text[i])
             right, bottom_2 = getsize(font, text[: i + 1])
             bottom = bottom_1 if bottom_1 < bottom_2 else bottom_2
             width, height = font.getmask(char).size
