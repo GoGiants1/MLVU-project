@@ -1,5 +1,5 @@
 #pretrained_checkpoint 안에 hi_sam_h.pth 넣으시오  
-from text_diffuser.mask_only_tools import draw_centers_with_text, mask_size, find_white_centers,sorting1
+from mask_only_tools import draw_centers_with_text, mask_size, find_white_centers,sorting1
 from PIL import Image 
 import numpy as np 
 
