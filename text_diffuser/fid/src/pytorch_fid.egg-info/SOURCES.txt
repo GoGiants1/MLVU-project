@@ -1,0 +1,13 @@
+README.md
+setup.py
+src/pytorch_fid/__init__.py
+src/pytorch_fid/__main__.py
+src/pytorch_fid/fid_score.py
+src/pytorch_fid/inception.py
+src/pytorch_fid.egg-info/PKG-INFO
+src/pytorch_fid.egg-info/SOURCES.txt
+src/pytorch_fid.egg-info/dependency_links.txt
+src/pytorch_fid.egg-info/entry_points.txt
+src/pytorch_fid.egg-info/requires.txt
+src/pytorch_fid.egg-info/top_level.txt
+tests/test_fid_score.py
