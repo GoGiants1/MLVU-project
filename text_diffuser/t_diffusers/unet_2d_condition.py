@@ -1191,7 +1191,7 @@ class UNet2DConditionModel(
             image_embeds = added_cond_kwargs.get("image_embeds")
             image_embeds = self.encoder_hid_proj(image_embeds)
             encoder_hidden_states = (encoder_hidden_states, image_embeds)
-            print("IP-Adapter here! ", len(encoder_hidden_states), encoder_hidden_states[0].shape)
+            #print("IP-Adapter here! ", len(encoder_hidden_states), encoder_hidden_states[0].shape)
         return encoder_hidden_states
 
     def forward(

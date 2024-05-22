@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 import cv2
 import numpy as np
 import torch
+import os
 from huggingface_hub import hf_hub_download
 from model.text_segmenter.unet import UNet
 from packaging import version
@@ -64,7 +65,7 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 from diffusers.utils.torch_utils import randn_tensor
-
+from PIL import Image
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -939,6 +940,8 @@ class StableDiffusionPipeline(
             ]
         ] = None,
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
+        save_output: bool = False,
+        output_dir: Optional[str] = "./output",
         **kwargs,
     ):
         r"""
@@ -1115,34 +1118,27 @@ class StableDiffusionPipeline(
             size=(256, 256), # TODO: Why 256?
             mode="nearest",
         )
-
+        segmentation_mask = torch.concat([segmentation_mask]*num_images_per_prompt, axis=0)
+        # we don't need this part please check it 
         img = text_mask_image
         img = cv2.resize(img, (width, height), interpolation=cv2.INTER_NEAREST)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         # making the image mask for inpainting ?
         _, binary = cv2.threshold(
-            gray, 250, 255, cv2.THRESH_BINARY
+            gray, 50, 255, cv2.THRESH_BINARY
         )  # pixel value is set to 0 or 255 according to the threshold
         image_mask = 1 - (binary.astype(np.float32) / 255)
         image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
 
-        image = input_image.convert("RGB").resize((width, height))
-        image_tensor = (
-            ToTensor()(image)
-            .unsqueeze(0)
-            .sub_(0.5)
-            .div_(0.5)
-            .to(device=device, dtype=dtype)
-        )
-
         # 1.2 prepare mask for inpainting
-
+        '''
         masked_image = image_tensor * (1 - image_mask)
         masked_feature = (
             self.vae.encode(masked_image)
             .latent_dist.sample()
             .repeat(sample_num, 1, 1, 1)
         )
+        '''
 
         #### Original #####
         # masked_feature = masked_feature * vae.config.scaling_factor
@@ -1165,11 +1161,13 @@ class StableDiffusionPipeline(
         masked_feature = masked_feature * self.vae.config.scaling_factor
 
         # TODO: Hard coded for 256x256
+        '''
         image_mask = torch.nn.functional.interpolate(
             image_mask, size=(256, 256), mode="nearest"
         ).repeat(sample_num, 1, 1, 1)
-
-        segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
+        '''
+       
+        #segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
 
         # feature_mask = torch.nn.functional.interpolate(
         #     image_mask, size=(64, 64), mode="nearest"
@@ -1183,9 +1181,9 @@ class StableDiffusionPipeline(
             if self.cross_attention_kwargs is not None
             else None
         )
-
+        scene_prompt = prompt.split("'")[0]+prompt.split("'")[2]
         prompt_embeds, negative_prompt_embeds = self.encode_prompt(
-            prompt,
+            scene_prompt,
             device,
             num_images_per_prompt,
             self.do_classifier_free_guidance,
@@ -1286,6 +1284,7 @@ class StableDiffusionPipeline(
                     timestep_cond=timestep_cond,
                     cross_attention_kwargs=self.cross_attention_kwargs,
                     added_cond_kwargs=added_cond_kwargs,
+                    attention_mask = None, #image_mask
                     #### ADDED####
                     segmentation_mask=segmentation_mask,
                     feature_mask=feature_mask,
@@ -1336,33 +1335,53 @@ class StableDiffusionPipeline(
                         callback(step_idx, t, latents)
 
         if not output_type == "latent":
-            image = self.vae.decode(
+            images = self.vae.decode(
                 latents / self.vae.config.scaling_factor,
                 return_dict=False,
                 generator=generator,
             )[0]
-            image, has_nsfw_concept = self.run_safety_checker(
-                image, device, prompt_embeds.dtype
+            images, has_nsfw_concept = self.run_safety_checker(
+                images, device, prompt_embeds.dtype
             )
         else:
-            image = latents
+            images = latents
             has_nsfw_concept = None
 
         if has_nsfw_concept is None:
-            do_denormalize = [True] * image.shape[0]
+            do_denormalize = [True] * images.shape[0]
         else:
             do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
 
-        image = self.image_processor.postprocess(
-            image, output_type=output_type, do_denormalize=do_denormalize
+        images = self.image_processor.postprocess(
+            images, output_type=output_type, do_denormalize=do_denormalize
         )
 
         # Offload all models
         self.maybe_free_model_hooks()
+        if save_output:
+            os.makedirs(f"{output_dir}", exist_ok=True)
+            os.makedirs(f"{output_dir}/{prompt}", exist_ok=True)
+            for index, img in enumerate(images):
+                if isinstance(img, Image.Image):
+                    img.save(f"{output_dir}/{prompt}/{index}.jpg")
+                else:
+                    print("Image is not in PIL format")
+                    assert False
+        input_image.save(f"{output_dir}/{prompt}/input.jpg")
+        if os.path.exists(os.path.join(output_dir, "latest")):
+            os.unlink(os.path.join(output_dir, "latest"))
+        os.symlink(
+            os.path.abspath(os.path.join(output_dir, prompt)),
+            os.path.abspath(os.path.join(output_dir, "latest/")),
+        )
+
 
         if not return_dict:
-            return (image, has_nsfw_concept)
+            return (images, has_nsfw_concept)
+        # save pred_img
+        
+        
 
         return StableDiffusionPipelineOutput(
-            images=image, nsfw_content_detected=has_nsfw_concept
+            images=images, nsfw_content_detected=has_nsfw_concept
         )
