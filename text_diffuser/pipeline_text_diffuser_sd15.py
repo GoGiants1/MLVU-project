@@ -66,6 +66,7 @@ from diffusers.utils import (
 )
 from diffusers.utils.torch_utils import randn_tensor
 from PIL import Image
+from diffusers.image_processor import IPAdapterMaskProcessor
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -1142,6 +1143,9 @@ class StableDiffusionPipeline(
             .unsqueeze(0)
             .to(device=device, dtype=dtype)
         )
+        #image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
+        processor = IPAdapterMaskProcessor()
+        masks = processor.preprocess([image_mask], height=512, width=512)
 
         # 1.2 prepare mask for inpainting
         '''
@@ -1206,6 +1210,7 @@ class StableDiffusionPipeline(
             lora_scale=lora_scale,
             clip_skip=self.clip_skip,
         )
+        
 
         # For classifier free guidance, we need to do two forward passes.
         # Here we concatenate the unconditional and text embeddings into a single batch
@@ -1295,9 +1300,9 @@ class StableDiffusionPipeline(
                     t,
                     encoder_hidden_states=prompt_embeds,
                     timestep_cond=timestep_cond,
-                    cross_attention_kwargs=self.cross_attention_kwargs,
                     added_cond_kwargs=added_cond_kwargs,
                     attention_mask = None, #image_mask
+                    cross_attention_kwargs={"ip_adapter_masks": masks},
                     #### ADDED####
                     segmentation_mask=segmentation_mask,
                     feature_mask=feature_mask,
