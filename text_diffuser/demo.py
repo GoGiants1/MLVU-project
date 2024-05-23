@@ -29,7 +29,7 @@ pipe.load_ip_adapter(
         "ip-adapter_sd15.safetensors",
     ],
 )
-pipe.set_ip_adapter_scale(1.0)
+pipe.set_ip_adapter_scale(0.6)
 
 text_mask_image = cv2.imread("assets/examples/text-inpainting/case3_mask.jpg") ## 수용님이 만드신 마스크 이미지 혹은 넘파이 배열이 들어가야합니다.
 
