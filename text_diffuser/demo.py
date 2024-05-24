@@ -32,11 +32,11 @@ pipe.load_ip_adapter(
         "ip-adapter_sd15.safetensors",
     ],
 )
-pipe.set_ip_adapter_scale(1.3)
+pipe.set_ip_adapter_scale(0.9)
 
 input_image = Image.open("assets/examples/text-inpainting/case3.jpg").convert("RGB").resize((512, 512))
 
-sample_text="bear"
+sample_text="jaehak"
 # for original_input.jpeg. 110, 500에서 가장 가까운 mask의 글자를 바꾼다.
 coordinates=[[110, 500]] 
 
@@ -56,20 +56,20 @@ arg_maskgen = make_text_segmentation_args(
 
 out = gen_mask_only(input_image, sample_text=sample_text, choice_list=coordinates, arg_textseg=arg_textseg, arg_maskgen=arg_maskgen)
 out.save(f"./assets/examples/text-inpainting/mask_3_out.png") # for debugging
-text_mask_image = cv2.cvtColor(np.array(out), cv2.COLOR_RGB2BGR)
+text_mask_image= cv2.cvtColor(np.array(out), cv2.COLOR_RGB2BGR)
 
 pipe.scheduler = DDPMScheduler.from_config(pipe.scheduler.config)
 generator = torch.Generator(device="cuda").manual_seed(42)
 pipe.to("cuda")
 output = pipe(
-    prompt="a red board saying 'Sessions'",
+    prompt="a red board saying 'jaehak' in the street",
     input_image=input_image,
     text_mask_image=text_mask_image,
     ip_adapter_image = input_image,
     num_inference_steps = 50,
     width=512,
     height=512,
-    guidance_scale=9.5,
+    guidance_scale=7.5,
     generator=generator,
     save_output = True,
     num_images_per_prompt = 4,

@@ -1136,39 +1136,44 @@ class StableDiffusionPipeline(
         _, binary = cv2.threshold(
             gray, 50, 255, cv2.THRESH_BINARY
         )  # pixel value is set to 0 or 255 according to the threshold
-        image_mask = 1 - (binary.astype(np.float32) / 255)
-        image_mask = (
-            torch.from_numpy(image_mask)
-            .unsqueeze(0)
-            .unsqueeze(0)
-            .to(device=device, dtype=dtype)
-        )
-        #image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
+        image_mask = binary.astype(np.float32) / 255
         processor = IPAdapterMaskProcessor()
         masks = processor.preprocess([image_mask], height=512, width=512)
+        image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
+
+        image = input_image.convert("RGB").resize((width, height))
+        image_tensor = (
+            ToTensor()(image)
+            .unsqueeze(0)
+            .sub_(0.5)
+            .div_(0.5)
+            .to(device=device, dtype=dtype)
+        )
 
         # 1.2 prepare mask for inpainting
-        '''
-        masked_image = image_tensor * (1 - image_mask)
+        masked_image = image_tensor * image_mask
         masked_feature = (
             self.vae.encode(masked_image)
             .latent_dist.sample()
             .repeat(sample_num, 1, 1, 1)
         )
-        '''
+        masked_feature = masked_feature * self.vae.config.scaling_factor
+    
 
         #### Original #####
-        # masked_feature = masked_feature * vae.config.scaling_factor
-        # masked_image = torch.zeros(sample_num, 3, 512, 512).to(
-        #     "cuda"
-        # )  # (b, 3, 512, 512)
-        # masked_feature = vae.encode(masked_image).latent_dist.sample()  # (b, 4, 64, 64)
-        # masked_feature = masked_feature * vae.config.scaling_factor
+        '''
+        masked_feature = masked_feature * self.vae.config.scaling_factor
+        masked_image = torch.zeros(sample_num, 3, 512, 512).to(
+            "cuda"
+        )  # (b, 3, 512, 512)
+        masked_feature = self.vae.encode(masked_image).latent_dist.sample()  # (b, 4, 64, 64)
+        masked_feature = masked_feature * self.vae.config.scaling_factor
+        '''
 
         #####################
 
         ##### Background #####
-
+        '''
         masked_image = torch.zeros(sample_num, 3, width, height).to(
             device
         )  # (b, 3, 512, 512)
@@ -1176,7 +1181,7 @@ class StableDiffusionPipeline(
             masked_image
         ).latent_dist.sample()  # (b, 4, 64, 64)
         masked_feature = masked_feature * self.vae.config.scaling_factor
-
+        '''
         # TODO: Hard coded for 256x256
         '''
         image_mask = torch.nn.functional.interpolate(
@@ -1186,9 +1191,9 @@ class StableDiffusionPipeline(
        
         #segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
 
-        # feature_mask = torch.nn.functional.interpolate(
-        #     image_mask, size=(64, 64), mode="nearest"
-        # ) # 원본
+        feature_mask = torch.nn.functional.interpolate(
+             1-image_mask, size=(64, 64), mode="nearest"
+        ) 
 
         feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
 
