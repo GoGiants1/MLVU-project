@@ -1126,7 +1126,6 @@ class StableDiffusionPipeline(
         )
 
         # 4. Preprocess image
-        preprocessed_image = self.image_processor.preprocess(input_image)
         segmentation_mask = torch.concat([segmentation_mask]*num_images_per_prompt, axis=0)
         # we don't need this part please check it 
         img = text_mask_image
@@ -1142,6 +1141,15 @@ class StableDiffusionPipeline(
         image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
 
         # 1.2 prepare mask for inpainting
+        image = input_image.convert("RGB").resize((width, height))
+        image_tensor = (
+            ToTensor()(image)
+            .unsqueeze(0)
+            .sub_(0.5)
+            .div_(0.5)
+            .to(device=device, dtype=dtype)
+        )
+
 
         masked_image = image_tensor * image_mask
         masked_feature = (

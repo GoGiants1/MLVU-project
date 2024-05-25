@@ -34,7 +34,7 @@ pipe.load_ip_adapter(
 )
 pipe.set_ip_adapter_scale(0.9)
 
-input_image = Image.open("assets/examples/text-inpainting/case3.jpg").convert("RGB").resize((512, 512))
+input_image = Image.open("assets/examples/text-inpainting/case8.jpg").convert("RGB").resize((512, 512))
 
 sample_text="jaehak"
 # for original_input.jpeg. 110, 500에서 가장 가까운 mask의 글자를 바꾼다.

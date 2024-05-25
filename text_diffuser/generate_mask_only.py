@@ -35,24 +35,23 @@ def gen_mask_only(image, sample_text, choice_list, arg_textseg, arg_maskgen):
     mask, _ = run_text_detection(amg=amg, image=image)
     masked_text_stroke = run_text_stroke_segmentation(sam_detector=sam, image=image, patch_mode=True)
 
-    mask3=np.zeros_like(masked_text_stroke)
-
-    # tss = Image.fromarray(masked_text_stroke)
-    # tss.save("tss.png")
-    mask3 = np.where(masked_text_stroke > 0, 0.0, 255.0)
+    #tss = Image.fromarray(masked_text_stroke)
+    #tss.save("tss.png")
+    stroke_mask = np.where(masked_text_stroke == True, 255, 0)
 
     # mask3_image = Image.fromarray(mask3, "L")
     # save mask3
     # mask3_image.save("mask3.png")
 
-    stroke_mask=mask3
     #검정색 글씨 하얀배경
     masks=mask.squeeze(1)
-
-    new_mask=np.zeros_like(masks[0,:,:])
-
-    for mask in masks:
-        new_mask+=mask
+    #검정색 배경 하얀 mask
+    new_mask=np.sum(masks,axis=0)
+    new_mask = 255-new_mask
+    Image.fromarray(masks[0], "L").save("assets/examples/text-inpainting/new_mask.png")
+    Image.fromarray(stroke_mask, "L").save("assets/examples/text-inpainting/stroke_mask.png")
+    exit()
+    
 
 
     new_mask=Image.fromarray(new_mask)
