@@ -3,25 +3,6 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 
-def find_white_centers(image):
-
-    image = image.convert('L')
-    np_image = np.array(image)
-
-    _, binary_image = cv2.threshold(np_image, 254, 255, cv2.THRESH_BINARY)
-
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_image, connectivity=8)
-
-    centers = []
-
-    for i in range(1, num_labels):
-        center_x = int(centroids[i][0])
-        center_y = int(centroids[i][1])
-        centers.append((center_x, center_y))
-
-    return centers
-
-
 
 def draw_centers_with_text(mask,centers,text_contents,font_size_list,choice_list,stroke):
 
@@ -86,21 +67,21 @@ def sorting1(list):
     return sorted_centers
 
 
-def take_info(image):
-
-    image = image.convert('L')
-    np_image = np.array(image)
-
+def take_info(np_image):
+    #np_image는 검은 바탕에 흰색 박스들로 이루어진 이미지
     _, binary_image = cv2.threshold(np_image, 254, 255, cv2.THRESH_BINARY)
 
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_image, connectivity=8)
 
     masks_size = []
-    for i in range(1, num_labels):
-        x, y, w, h, area = stats[i]
-        masks_size.append((w, h))
-
-    return masks_size
+    centers = []
+    for i in range(len(num_labels)):
+        _,_, w, h, _ = stats[i]
+        masks_size.append(min(w,h))
+        center_x = int(centroids[i][0])
+        center_y = int(centroids[i][1])
+        centers.append((center_x, center_y))
+    return (centers,masks_size)
 
 
 

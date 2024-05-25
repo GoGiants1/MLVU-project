@@ -3,7 +3,7 @@ import os
 import sys
 
 import numpy as np
-from mask_only_tools import draw_centers_with_text, find_white_centers, mask_size, sorting1
+from mask_only_tools import draw_centers_with_text, find_white_centers, take_info, sorting1
 from PIL import Image
 
 
@@ -46,16 +46,12 @@ def gen_mask_only(image, sample_text, choice_list, arg_textseg, arg_maskgen):
     #검정색 글씨 하얀배경
     masks=mask.squeeze(1)
     #검정색 배경 하얀 mask
-    new_mask=255-np.array(np.sum(masks,axis=0),dtype=np.uint8)*255
-    new_mask=Image.fromarray(new_mask)
+    new_mask=np.array(np.sum(masks,axis=0),dtype=np.uint8)*255
 
-    font_size_list0=mask_size(new_mask)
-    centers=find_white_centers(new_mask)
+    centers, font_size_list=take_info(new_mask)
     centers=sorting1(centers)
-
-    font_size_list=[factor[1] for factor in font_size_list0]
     # 유저 마음대로 x y 좌표를 정하고 그 좌표에 가장 가까운 부분의 scene text 부분만 bear로 바꾸기 , 나머지부분은 stroke 한걸로 하기
     text_contents=sample_text
-    scene_text_image=draw_centers_with_text(new_mask2,centers,text_contents,font_size_list,choice_list,stroke_mask)
+    scene_text_image=draw_centers_with_text(new_mask,centers,text_contents,font_size_list,choice_list,stroke_mask)
 
     return scene_text_image
