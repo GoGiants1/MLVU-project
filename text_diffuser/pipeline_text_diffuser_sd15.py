@@ -1197,7 +1197,7 @@ class StableDiffusionPipeline(
              1-image_mask, size=(64, 64), mode="nearest"
         ) 
 
-        feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
+        #feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
 
         # 3. Encode input prompt
         lora_scale = (

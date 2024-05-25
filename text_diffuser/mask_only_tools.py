@@ -86,7 +86,7 @@ def sorting1(list):
     return sorted_centers
 
 
-def mask_size(image):
+def take_info(image):
 
     image = image.convert('L')
     np_image = np.array(image)

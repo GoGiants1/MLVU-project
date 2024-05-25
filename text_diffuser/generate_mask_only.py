@@ -37,28 +37,20 @@ def gen_mask_only(image, sample_text, choice_list, arg_textseg, arg_maskgen):
 
     #tss = Image.fromarray(masked_text_stroke)
     #tss.save("tss.png")
-    stroke_mask = np.where(masked_text_stroke == True, 255, 0)
+    stroke_mask = np.array(np.where(masked_text_stroke == True, 0, 255), dtype=np.uint8) 
 
     # mask3_image = Image.fromarray(mask3, "L")
     # save mask3
     # mask3_image.save("mask3.png")
-
+    print(mask.shape)
     #검정색 글씨 하얀배경
     masks=mask.squeeze(1)
     #검정색 배경 하얀 mask
-    new_mask=np.sum(masks,axis=0)
-    new_mask = 255-new_mask
-    Image.fromarray(masks[0], "L").save("assets/examples/text-inpainting/new_mask.png")
-    Image.fromarray(stroke_mask, "L").save("assets/examples/text-inpainting/stroke_mask.png")
-    exit()
-    
-
-
+    new_mask=255-np.array(np.sum(masks,axis=0),dtype=np.uint8)*255
     new_mask=Image.fromarray(new_mask)
-    new_mask2=new_mask
 
-    font_size_list0=mask_size(new_mask2)
-    centers=find_white_centers(new_mask2)
+    font_size_list0=mask_size(new_mask)
+    centers=find_white_centers(new_mask)
     centers=sorting1(centers)
 
     font_size_list=[factor[1] for factor in font_size_list0]
