@@ -1136,9 +1136,7 @@ class StableDiffusionPipeline(
         _, binary = cv2.threshold(
             gray, 200, 255, cv2.THRESH_BINARY
         )  # pixel value is set to 0 or 255 according to the threshold
-        image_mask = binary.astype(np.float32)/255.0
-        processor = IPAdapterMaskProcessor()
-        masks = processor.preprocess([image_mask], height=512, width=512)
+        image_mask = binary.astype(np.float32) / 255
         image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
 
         # 1.2 prepare mask for inpainting
@@ -1198,7 +1196,7 @@ class StableDiffusionPipeline(
              1-image_mask, size=(64, 64), mode="nearest"
         )
 
-        feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
+        # feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
 
         # 3. Encode input prompt
         lora_scale = (
@@ -1278,14 +1276,19 @@ class StableDiffusionPipeline(
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
 
-        print("latent shape", latents.shape)
-        print("prompt_embeds shape or enc hidden state", prompt_embeds.shape)
-        print("feature_mask shape", feature_mask.shape)
-        print("masked_feature shape", masked_feature.shape)
-        print("segmentation_mask shape", segmentation_mask.shape)
+
         feature_mask = torch.cat([feature_mask] * 2, dim=0)
         masked_feature = torch.cat([masked_feature] * 2, dim=0)
         segmentation_mask = torch.cat([segmentation_mask] * 2, dim=0)
+
+        processor = IPAdapterMaskProcessor()
+        ip_masks = processor.preprocess([image_mask], height=height, width=width)
+
+        if self.cross_attention_kwargs is not None:
+            self.cross_attention_kwargs["ip_adapter_masks"] = ip_masks
+        else:
+            self.cross_attention_kwargs = {"ip_adapter_masks": ip_masks}
+
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 if self.interrupt:
@@ -1309,9 +1312,8 @@ class StableDiffusionPipeline(
                     encoder_hidden_states=prompt_embeds,
                     timestep_cond=timestep_cond,
                     added_cond_kwargs=added_cond_kwargs,
-                    attention_mask = None, #image_mask,
-                    cross_attention_kwargs={"ip_adapter_masks": masks},
-
+                    attention_mask = None, #image_mask
+                    cross_attention_kwargs=self.cross_attention_kwargs,
                     #### ADDED####
                     segmentation_mask=segmentation_mask,
                     feature_mask=feature_mask,
