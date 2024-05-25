@@ -66,10 +66,8 @@ from diffusers.utils import (
 )
 from diffusers.utils.torch_utils import randn_tensor
 from PIL import Image
-<<<<<<< HEAD
-=======
 from diffusers.image_processor import IPAdapterMaskProcessor
->>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
+
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -1126,13 +1124,9 @@ class StableDiffusionPipeline(
             size=(256, 256),  # TODO: Why 256?
             mode="nearest",
         )
-<<<<<<< HEAD
-=======
 
         # 4. Preprocess image
         preprocessed_image = self.image_processor.preprocess(input_image)
-
->>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
         segmentation_mask = torch.concat([segmentation_mask]*num_images_per_prompt, axis=0)
         # we don't need this part please check it 
         img = text_mask_image
@@ -1148,23 +1142,17 @@ class StableDiffusionPipeline(
         image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
 
         # 1.2 prepare mask for inpainting
-<<<<<<< HEAD
-        '''
-        masked_image = image_tensor * (1 - image_mask)
-=======
+
         masked_image = image_tensor * image_mask
->>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
         masked_feature = (
             self.vae.encode(masked_image)
             .latent_dist.sample()
             .repeat(sample_num, 1, 1, 1)
         )
-<<<<<<< HEAD
-        '''
-=======
+        
         masked_feature = masked_feature * self.vae.config.scaling_factor
     
->>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
+
 
         #### Original #####
         '''
@@ -1189,23 +1177,17 @@ class StableDiffusionPipeline(
         masked_feature = masked_feature * self.vae.config.scaling_factor
         '''
         # TODO: Hard coded for 256x256
-        '''
+
         image_mask = torch.nn.functional.interpolate(
             image_mask, size=(256, 256), mode="nearest"
         ).repeat(sample_num, 1, 1, 1)
-        '''
        
         #segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
 
-<<<<<<< HEAD
-        # feature_mask = torch.nn.functional.interpolate(
-        #     image_mask, size=(64, 64), mode="nearest"
-        # ) # 원본
-=======
+
         feature_mask = torch.nn.functional.interpolate(
              1-image_mask, size=(64, 64), mode="nearest"
         ) 
->>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
 
         feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
 
@@ -1318,11 +1300,9 @@ class StableDiffusionPipeline(
                     encoder_hidden_states=prompt_embeds,
                     timestep_cond=timestep_cond,
                     added_cond_kwargs=added_cond_kwargs,
-                    attention_mask = None, #image_mask
-<<<<<<< HEAD
-=======
+                    attention_mask = None, #image_mask,
                     cross_attention_kwargs={"ip_adapter_masks": masks},
->>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
+
                     #### ADDED####
                     segmentation_mask=segmentation_mask,
                     feature_mask=feature_mask,
