@@ -1285,9 +1285,10 @@ class StableDiffusionPipeline(
         ip_masks = processor.preprocess([image_mask], height=height, width=width)
 
         if self.cross_attention_kwargs is not None:
-            self.cross_attention_kwargs["ip_adapter_masks"] = ip_masks
+            cross_attention_kwargs = self.cross_attention_kwargs.copy()
+            cross_attention_kwargs["ip_adapter_masks"] = ip_masks
         else:
-            self.cross_attention_kwargs = {"ip_adapter_masks": ip_masks}
+            cross_attention_kwargs = {"ip_adapter_masks": ip_masks}
 
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
@@ -1313,7 +1314,7 @@ class StableDiffusionPipeline(
                     timestep_cond=timestep_cond,
                     added_cond_kwargs=added_cond_kwargs,
                     attention_mask = None, #image_mask
-                    cross_attention_kwargs=self.cross_attention_kwargs,
+                    cross_attention_kwargs=cross_attention_kwargs,
                     #### ADDED####
                     segmentation_mask=segmentation_mask,
                     feature_mask=feature_mask,

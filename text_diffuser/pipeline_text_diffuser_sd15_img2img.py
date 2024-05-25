@@ -1293,7 +1293,6 @@ class StableDiffusionPipeline(
             1 - image_mask, size=(64, 64), mode="nearest"
         ) # 원본
 
-        # feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
 
         # 3. Encode input prompt
         lora_scale = (
@@ -1384,9 +1383,10 @@ class StableDiffusionPipeline(
         ip_masks = processor.preprocess([image_mask], height=height, width=width)
 
         if self.cross_attention_kwargs is not None:
-            self.cross_attention_kwargs["ip_adapter_masks"] = ip_masks
+            cross_attention_kwargs = self.cross_attention_kwargs.copy()
+            cross_attention_kwargs["ip_adapter_masks"] = ip_masks
         else:
-            self.cross_attention_kwargs = {"ip_adapter_masks": ip_masks}
+            cross_attention_kwargs = {"ip_adapter_masks": ip_masks}
 
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
@@ -1410,7 +1410,7 @@ class StableDiffusionPipeline(
                     t,
                     encoder_hidden_states=prompt_embeds,
                     timestep_cond=timestep_cond,
-                    cross_attention_kwargs=self.cross_attention_kwargs,
+                    cross_attention_kwargs=cross_attention_kwargs,
                     added_cond_kwargs=added_cond_kwargs,
                     #### ADDED####
                     segmentation_mask=segmentation_mask,
