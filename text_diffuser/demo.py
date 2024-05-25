@@ -2,12 +2,6 @@ import cv2
 import torch
 from PIL import Image
 from t_diffusers.unet_2d_condition import UNet2DConditionModel
-<<<<<<< HEAD
-
-from diffusers import AutoencoderKL, DDPMScheduler
-
-from pipeline_text_diffuser_sd15 import StableDiffusionPipeline
-=======
 from generate_mask_only import gen_mask_only
 from t_diffusers.unet_2d_condition import UNet2DConditionModel
 from diffusers import AutoencoderKL, DDPMScheduler
@@ -15,7 +9,6 @@ from diffusers import DDPMScheduler
 from pipeline_text_diffuser_sd15 import StableDiffusionPipeline
 from hi_sam.text_segmentation import make_text_segmentation_args
 import numpy as np
->>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
 
 td_ckpt = "textdiffuser-ckpt/diffusion_backbone_1.5"
 
