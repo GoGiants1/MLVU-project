@@ -1136,6 +1136,8 @@ class StableDiffusionPipeline(
         _, binary = cv2.threshold(
             gray, 200, 255, cv2.THRESH_BINARY
         )  # pixel value is set to 0 or 255 according to the threshold
+        # binary => 글자 검은색, 배경 흰색 => 글자 seg 0, 배경 1
+        # 1 - binary => 글자 흰색, 배경 검은색 => 글자 seg 1, 배경 0
         image_mask = binary.astype(np.float32) / 255
         image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
 
@@ -1204,7 +1206,17 @@ class StableDiffusionPipeline(
             if self.cross_attention_kwargs is not None
             else None
         )
-        scene_prompt = prompt.split("'")[0]+prompt.split("'")[2]
+        # '' 내부에 들어있는 텍스트 제거(scene_prompt) 및 추출(glyph_text_prompt)
+        
+        
+        if len(prompt.split("'")) > 1:
+            scene_prompt = prompt.split("'")[0]
+            glyph_text_prompt = prompt.split("'")[1]
+        else:
+            scene_prompt = prompt
+            glyph_text_prompt = None
+
+        
         prompt_embeds, negative_prompt_embeds = self.encode_prompt(
             scene_prompt,
             device,
@@ -1397,13 +1409,13 @@ class StableDiffusionPipeline(
                 else:
                     print("Image is not in PIL format")
                     assert False
-        input_image.save(f"{output_dir}/{prompt}/input.jpg")
-        if os.path.exists(os.path.join(output_dir, "latest")):
-            os.unlink(os.path.join(output_dir, "latest"))
-        os.symlink(
-            os.path.abspath(os.path.join(output_dir, prompt)),
-            os.path.abspath(os.path.join(output_dir, "latest/")),
-        )
+            input_image.save(f"{output_dir}/{prompt}/input.jpg")
+            if os.path.exists(os.path.join(output_dir, "latest")):
+                os.unlink(os.path.join(output_dir, "latest"))
+            os.symlink(
+                os.path.abspath(os.path.join(output_dir, prompt)),
+                os.path.abspath(os.path.join(output_dir, "latest/")),
+            )
 
 
         if not return_dict:

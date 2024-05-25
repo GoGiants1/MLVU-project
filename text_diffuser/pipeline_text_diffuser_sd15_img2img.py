@@ -1243,8 +1243,10 @@ class StableDiffusionPipeline(
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         # making the image mask for inpainting ?
         _, binary = cv2.threshold(
-            gray, 250, 255, cv2.THRESH_BINARY
+            gray, 50, 255, cv2.THRESH_BINARY
         )  # pixel value is set to 0 or 255 according to the threshold
+        # binary => 글자 검은색, 배경 흰색 => 글자 seg 0, 배경 1
+        # 1 - binary => 글자 흰색, 배경 검은색 => 글자 seg 1, 배경 0
         image_mask = binary.astype(np.float32) / 255
         image_mask = (
             torch.from_numpy(image_mask)
@@ -1263,7 +1265,7 @@ class StableDiffusionPipeline(
         )
 
         # 1.2 prepare mask for inpainting
-        masked_image = image_tensor * (1 - image_mask)
+        masked_image = image_tensor * image_mask
         masked_feature = (
             self.vae.encode(masked_image)
             .latent_dist.sample()
@@ -1271,16 +1273,6 @@ class StableDiffusionPipeline(
         )
         masked_feature = masked_feature * self.vae.config.scaling_factor
 
-
-        #### Original #####
-        # masked_feature = masked_feature * vae.config.scaling_factor
-        # masked_image = torch.zeros(sample_num, 3, 512, 512).to(
-        #     "cuda"
-        # )  # (b, 3, 512, 512)
-        # masked_feature = vae.encode(masked_image).latent_dist.sample()  # (b, 4, 64, 64)
-        # masked_feature = masked_feature * vae.config.scaling_factor
-
-        #####################
 
         # TODO: Hard coded for 256x256
         image_mask = torch.nn.functional.interpolate(
@@ -1382,11 +1374,6 @@ class StableDiffusionPipeline(
         processor = IPAdapterMaskProcessor()
         ip_masks = processor.preprocess([image_mask], height=height, width=width)
 
-        if self.cross_attention_kwargs is not None:
-            cross_attention_kwargs = self.cross_attention_kwargs.copy()
-            cross_attention_kwargs["ip_adapter_masks"] = ip_masks
-        else:
-            cross_attention_kwargs = {"ip_adapter_masks": ip_masks}
 
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
@@ -1410,7 +1397,7 @@ class StableDiffusionPipeline(
                     t,
                     encoder_hidden_states=prompt_embeds,
                     timestep_cond=timestep_cond,
-                    cross_attention_kwargs=cross_attention_kwargs,
+                    cross_attention_kwargs={"ip_adapter_masks": ip_masks},
                     added_cond_kwargs=added_cond_kwargs,
                     #### ADDED####
                     segmentation_mask=segmentation_mask,
