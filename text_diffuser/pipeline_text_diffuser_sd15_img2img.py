@@ -1360,7 +1360,7 @@ class StableDiffusionPipeline(
         #     latents,
         # )
         latents = self.prepare_latents_with_image(
-            image,
+            preprocessed_image,
             latent_timestep,
             batch_size,
             num_images_per_prompt,
