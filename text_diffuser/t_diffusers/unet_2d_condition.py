@@ -1295,8 +1295,6 @@ class UNet2DConditionModel(
 
         # 0. concat all the feature together (Seg mask, masked feature.)
         sample = torch.cat([sample, feature_mask, masked_feature], dim=1)
-        print(sample.shape)
-
         # convert encoder_attention_mask to a bias the same way we do for attention_mask
         if encoder_attention_mask is not None:
             encoder_attention_mask = (

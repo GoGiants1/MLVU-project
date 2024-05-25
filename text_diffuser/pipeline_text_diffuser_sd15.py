@@ -66,6 +66,10 @@ from diffusers.utils import (
 )
 from diffusers.utils.torch_utils import randn_tensor
 from PIL import Image
+<<<<<<< HEAD
+=======
+from diffusers.image_processor import IPAdapterMaskProcessor
+>>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -948,6 +952,10 @@ class StableDiffusionPipeline(
         The call function to the pipeline for generation.
 
         Args:
+            input_image (`PipelineImageInput`):
+                The input image to be used for image generation.
+            text_mask_image (`PipelineImageInput`):
+                The input image to be used for text masking.
             prompt (`str` or `List[str]`, *optional*):
                 The prompt or prompts to guide image generation. If not defined, you need to pass `prompt_embeds`.
             height (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
@@ -1115,9 +1123,16 @@ class StableDiffusionPipeline(
         segmentation_mask = filter_segmentation_mask(segmentation_mask)
         segmentation_mask = torch.nn.functional.interpolate(
             segmentation_mask.unsqueeze(0).unsqueeze(0).to(dtype=dtype),
-            size=(256, 256), # TODO: Why 256?
+            size=(256, 256),  # TODO: Why 256?
             mode="nearest",
         )
+<<<<<<< HEAD
+=======
+
+        # 4. Preprocess image
+        preprocessed_image = self.image_processor.preprocess(input_image)
+
+>>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
         segmentation_mask = torch.concat([segmentation_mask]*num_images_per_prompt, axis=0)
         # we don't need this part please check it 
         img = text_mask_image
@@ -1127,31 +1142,44 @@ class StableDiffusionPipeline(
         _, binary = cv2.threshold(
             gray, 50, 255, cv2.THRESH_BINARY
         )  # pixel value is set to 0 or 255 according to the threshold
-        image_mask = 1 - (binary.astype(np.float32) / 255)
+        image_mask = binary.astype(np.float32) / 255
+        processor = IPAdapterMaskProcessor()
+        masks = processor.preprocess([image_mask], height=512, width=512)
         image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
 
         # 1.2 prepare mask for inpainting
+<<<<<<< HEAD
         '''
         masked_image = image_tensor * (1 - image_mask)
+=======
+        masked_image = image_tensor * image_mask
+>>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
         masked_feature = (
             self.vae.encode(masked_image)
             .latent_dist.sample()
             .repeat(sample_num, 1, 1, 1)
         )
+<<<<<<< HEAD
         '''
+=======
+        masked_feature = masked_feature * self.vae.config.scaling_factor
+    
+>>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
 
         #### Original #####
-        # masked_feature = masked_feature * vae.config.scaling_factor
-        # masked_image = torch.zeros(sample_num, 3, 512, 512).to(
-        #     "cuda"
-        # )  # (b, 3, 512, 512)
-        # masked_feature = vae.encode(masked_image).latent_dist.sample()  # (b, 4, 64, 64)
-        # masked_feature = masked_feature * vae.config.scaling_factor
+        '''
+        masked_feature = masked_feature * self.vae.config.scaling_factor
+        masked_image = torch.zeros(sample_num, 3, 512, 512).to(
+            "cuda"
+        )  # (b, 3, 512, 512)
+        masked_feature = self.vae.encode(masked_image).latent_dist.sample()  # (b, 4, 64, 64)
+        masked_feature = masked_feature * self.vae.config.scaling_factor
+        '''
 
         #####################
 
         ##### Background #####
-
+        '''
         masked_image = torch.zeros(sample_num, 3, width, height).to(
             device
         )  # (b, 3, 512, 512)
@@ -1159,7 +1187,7 @@ class StableDiffusionPipeline(
             masked_image
         ).latent_dist.sample()  # (b, 4, 64, 64)
         masked_feature = masked_feature * self.vae.config.scaling_factor
-
+        '''
         # TODO: Hard coded for 256x256
         '''
         image_mask = torch.nn.functional.interpolate(
@@ -1169,9 +1197,15 @@ class StableDiffusionPipeline(
        
         #segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
 
+<<<<<<< HEAD
         # feature_mask = torch.nn.functional.interpolate(
         #     image_mask, size=(64, 64), mode="nearest"
         # ) # 원본
+=======
+        feature_mask = torch.nn.functional.interpolate(
+             1-image_mask, size=(64, 64), mode="nearest"
+        ) 
+>>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
 
         feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
 
@@ -1193,6 +1227,7 @@ class StableDiffusionPipeline(
             lora_scale=lora_scale,
             clip_skip=self.clip_skip,
         )
+        
 
         # For classifier free guidance, we need to do two forward passes.
         # Here we concatenate the unconditional and text embeddings into a single batch
@@ -1219,7 +1254,7 @@ class StableDiffusionPipeline(
         num_channels_latents = 4
         latents = self.prepare_latents(
             batch_size * num_images_per_prompt,
-            4, #FIXME: Hardcoded...
+            4,  # FIXME: Hardcoded...
             height,
             width,
             prompt_embeds.dtype,
@@ -1282,9 +1317,12 @@ class StableDiffusionPipeline(
                     t,
                     encoder_hidden_states=prompt_embeds,
                     timestep_cond=timestep_cond,
-                    cross_attention_kwargs=self.cross_attention_kwargs,
                     added_cond_kwargs=added_cond_kwargs,
                     attention_mask = None, #image_mask
+<<<<<<< HEAD
+=======
+                    cross_attention_kwargs={"ip_adapter_masks": masks},
+>>>>>>> 83f4cc22711c0b7eab049592e79283d883762d14
                     #### ADDED####
                     segmentation_mask=segmentation_mask,
                     feature_mask=feature_mask,
