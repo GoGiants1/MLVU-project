@@ -52,3 +52,45 @@ def gen_mask_only(image, sample_text, coordinates, arg_textseg, arg_maskgen):
     scene_text_image = draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls, coordinates, stroke_mask)
 
     return scene_text_image
+
+
+def gen_bbox_mask_and_text_stroke_mask(image, sample_text, choice_list, arg_textseg, arg_maskgen):
+    amg = load_auto_mask_generator(arg_maskgen)
+    sam = load_sam_predictor(args=arg_textseg)
+
+    mask, _ = run_text_detection(amg=amg, image=image)
+    masked_text_stroke = run_text_stroke_segmentation(sam_detector=sam, image=image, patch_mode=True)
+
+    mask3=np.zeros_like(masked_text_stroke)
+
+    # tss = Image.fromarray(masked_text_stroke)
+    # tss.save("tss.png")
+    mask3 = np.where(masked_text_stroke > 0, 0.0, 255.0)
+
+    # mask3_image = Image.fromarray(mask3, "L")
+    # save mask3
+    # mask3_image.save("mask3.png")
+
+    stroke_mask=mask3
+    #검정색 글씨 하얀배경
+    masks=mask.squeeze(1)
+
+    new_mask=np.zeros_like(masks[0,:,:])
+
+    for mask in masks:
+        new_mask+=mask
+
+
+    new_mask=Image.fromarray(new_mask)
+    new_mask2=new_mask
+
+    font_size_list0=mask_size(new_mask2)
+    centers=find_white_centers(new_mask2)
+    centers=sorting1(centers)
+
+    font_size_list=[factor[1] for factor in font_size_list0]
+    # 유저 마음대로 x y 좌표를 정하고 그 좌표에 가장 가까운 부분의 scene text 부분만 bear로 바꾸기 , 나머지부분은 stroke 한걸로 하기
+    text_contents=sample_text
+    scene_text_image=draw_centers_with_text(new_mask2,centers,text_contents,font_size_list,choice_list,stroke_mask)
+
+    return scene_text_image, np.asarray(masked_text_stroke, dtype=np.uint8) * 255

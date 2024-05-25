@@ -2587,18 +2587,18 @@ class IPAdapterAttnProcessor(nn.Module):
         hidden_states = attn.batch_to_head_dim(hidden_states)
 
         if ip_adapter_masks is not None:
-            if (
-                not isinstance(ip_adapter_masks, torch.Tensor)
-                or ip_adapter_masks.ndim != 4
-            ):
+            if not isinstance(ip_adapter_masks, torch.Tensor) or ip_adapter_masks.ndim != 4:
                 raise ValueError(
                     " ip_adapter_mask should be a tensor with shape [num_ip_adapter, 1, height, width]."
                     " Please use `IPAdapterMaskProcessor` to preprocess your mask"
                 )
             if len(ip_adapter_masks) != len(self.scale):
-                raise ValueError(
-                    f"Number of ip_adapter_masks ({len(ip_adapter_masks)}) must match number of IP-Adapters ({len(self.scale)})"
-                )
+                if len(ip_adapter_masks) > len(self.scale):
+                    self.scale = [scale / len(ip_adapter_masks) for _ in range(len(ip_adapter_masks))]
+                else:
+                    raise ValueError(
+                        f"Number of ip_adapter_masks ({len(ip_adapter_masks)}) must match number of IP-Adapters ({len(self.scale)})"
+                    )
         else:
             ip_adapter_masks = [None] * len(self.scale)
 
@@ -2820,18 +2820,18 @@ class IPAdapterAttnProcessor2_0(torch.nn.Module):
         hidden_states = hidden_states.to(query.dtype)
 
         if ip_adapter_masks is not None:
-            if (
-                not isinstance(ip_adapter_masks, torch.Tensor)
-                or ip_adapter_masks.ndim != 4
-            ):
+            if not isinstance(ip_adapter_masks, torch.Tensor) or ip_adapter_masks.ndim != 4:
                 raise ValueError(
                     " ip_adapter_mask should be a tensor with shape [num_ip_adapter, 1, height, width]."
                     " Please use `IPAdapterMaskProcessor` to preprocess your mask"
                 )
             if len(ip_adapter_masks) != len(self.scale):
-                raise ValueError(
-                    f"Number of ip_adapter_masks ({len(ip_adapter_masks)}) must match number of IP-Adapters ({len(self.scale)})"
-                )
+                if len(ip_adapter_masks) > len(self.scale):
+                    self.scale = [scale / len(ip_adapter_masks) for _ in range(len(ip_adapter_masks))]
+                else:
+                    raise ValueError(
+                        f"Number of ip_adapter_masks ({len(ip_adapter_masks)}) must match number of IP-Adapters ({len(self.scale)})"
+                    )
         else:
             ip_adapter_masks = [None] * len(self.scale)
 

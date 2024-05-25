@@ -341,6 +341,7 @@ class StableDiffusionPipeline(
             do_convert_grayscale=True,
         )
         self.register_to_config(requires_safety_checker=requires_safety_checker)
+        self.ip_mask_processor = IPAdapterMaskProcessor()
 
     def _encode_prompt(
         self,
@@ -911,6 +912,7 @@ class StableDiffusionPipeline(
         self,
         input_image: PipelineImageInput,
         text_mask_image: PipelineImageInput,
+        text_stroke_mask: Optional[PipelineImageInput] = None,
         prompt: Union[str, List[str]] = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
@@ -1293,9 +1295,12 @@ class StableDiffusionPipeline(
         masked_feature = torch.cat([masked_feature] * 2, dim=0)
         segmentation_mask = torch.cat([segmentation_mask] * 2, dim=0)
 
-        processor = IPAdapterMaskProcessor()
-        ip_masks = processor.preprocess([image_mask], height=height, width=width)
+        ip_masks = self.ip_mask_processor.preprocess(image_mask, height=height, width=width).to(device=device, dtype=dtype)
+        tss_ip_masks = self.ip_mask_processor.preprocess(text_stroke_mask, height=height, width=width).to(device=device, dtype=dtype)
+        
+        ip_masks = torch.cat([ip_masks, tss_ip_masks], dim=0)
 
+        
         if self.cross_attention_kwargs is not None:
             cross_attention_kwargs = self.cross_attention_kwargs.copy()
             cross_attention_kwargs["ip_adapter_masks"] = ip_masks
