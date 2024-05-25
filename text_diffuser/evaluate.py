@@ -30,7 +30,8 @@ from packaging import version
 from PIL import (
     Image,
 )
-
+from clipscore.clipscore import cal_clip_score
+from fid.src.pytorch_fid.fid_score import cal_fid
 # import for visualization
 from termcolor import colored
 from torchvision import transforms
@@ -237,6 +238,15 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--target_images",
+        type=str,
+        default=None,  
+        required=True,
+        help=(
+            "prompt 리스트의 n번째 줄과 내용이 맞는 이미지들은 n번째 폴더 즉 이름이 숫자 n인 폴더에 넣는다, target_images 폴더안에 이름이 n인폴더존재"
+        ),
+    )
+    parser.add_argument(
         "--enable_xformers_memory_efficient_attention",
         action="store_true",
         help="Whether or not to use xformers.",
@@ -439,8 +449,10 @@ def main():
             os.path.join(args.output_dir, "textdiffuser", "images_" + str(idx)),
             exist_ok=True,
         )
-
+    
     for prompt_index, prompt in enumerate(prompts):
+        # target directory 내 첫번째 폴더에 prompt list 의 첫줄의 내용과 맞는이미지들이 모여있다.  
+        # target directory 내 n번째 폴더에 prompt list 의 n번째줄의 내용과 맞는이미지들이 모여있다.  
 
         args.prompt = prompt
 
@@ -563,12 +575,54 @@ def main():
 
         # decode and visualization
         input = 1 / vae.config.scaling_factor * input
-        sample_images = vae.decode(input.float(), return_dict=False)[
-            0
-        ]  # (b, 3, 512, 512)
+        sample_images = vae.decode(input.float(), return_dict=False)[0]
+        
+        #시작
+        #clip score 계산 
+        sample_images2=torch.permute(sample_images,(0,2,3,1))
+        sample_images2=np.array(sample_images2)
+        clip_score=cal_clip_score(sample_images2,captions)
+        
+        print("\n")
+        print(f"Aveage CLIP SCORE of the prompt **{captions[0]}** : ",clip_score)
+        print("\n")
+
+        #fid score 계산 
+
+        import glob 
+        target_images=glob.glob(f"{args.target_images}/{prompt_index+1}/*")
+        target_list=[]
+        
+        w,h=sample_images2.shape[1],sample_images2.shape[2]
+        while len(target_list)<sample_images2.shape[0]:
+
+            for img in target_images:
+                if len(target_list)==sample_images2.shape[0]:
+                    break
+            
+                try:
+                    img=Image.open(img)
+                    img=img.resize((w,h))
+                    img=np.array(img)
+                    target_list.append(img)
+                except:
+                    continue
+            
+        target_images2 = np.stack(target_list)
+        assert sample_images2.shape[0]==target_images2.shape[0]
+
+        final_fid=cal_fid(sample_images2,target_images2)
+
+        print("\n")
+        print(f"FID SCORE of the prompt **{captions[0]}** : ",final_fid)
+        print("\n")
+
+        #끝
+
 
         image_pil = render_image.resize((512, 512))
         segmentation_mask = segmentation_mask[0].squeeze().cpu().numpy()
+
         character_mask_pil = Image.fromarray(
             ((segmentation_mask != 0) * 255).astype("uint8")
         ).resize((512, 512))
