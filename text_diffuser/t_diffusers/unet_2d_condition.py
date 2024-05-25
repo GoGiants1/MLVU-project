@@ -1191,7 +1191,7 @@ class UNet2DConditionModel(
             image_embeds = added_cond_kwargs.get("image_embeds")
             image_embeds = self.encoder_hid_proj(image_embeds)
             encoder_hidden_states = (encoder_hidden_states, image_embeds)
-            print("IP-Adapter here! ", len(encoder_hidden_states), encoder_hidden_states[0].shape)
+            #print("IP-Adapter here! ", len(encoder_hidden_states), encoder_hidden_states[0].shape)
         return encoder_hidden_states
 
     def forward(
@@ -1295,8 +1295,6 @@ class UNet2DConditionModel(
 
         # 0. concat all the feature together (Seg mask, masked feature.)
         sample = torch.cat([sample, feature_mask, masked_feature], dim=1)
-        print(sample.shape)
-
         # convert encoder_attention_mask to a bias the same way we do for attention_mask
         if encoder_attention_mask is not None:
             encoder_attention_mask = (
