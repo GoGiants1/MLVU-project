@@ -4,12 +4,13 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 
-def draw_centers_with_text(mask,centers,text_contents,font_size_list,choice_list,stroke):
+def draw_centers_with_text(mask,centers,text_contents,font_size_list,coordinates,stroke):
 
     #input_img :numpy array
     #storke: 0-255 1차원 , 검정색 부분이 글자 ,
+    #mask: 검정색 배경 하얀색 mask
+    #centers: mask들의 중심좌표 
 
-    mask=np.array(mask)
     image0 = np.ones_like(mask)
     image=Image.fromarray(image0)
     image=image.convert("L")
@@ -29,7 +30,7 @@ def draw_centers_with_text(mask,centers,text_contents,font_size_list,choice_list
     draw = ImageDraw.Draw(image)
 
     # choice list내에 있는 좌표와 가장 가까운 scene text 부분만 bear 로 대체가 된다.
-    for chosen in choice_list:
+    for chosen in coordinates:
         the_index=closest_index(choice_list=chosen,centers=centers)
 
         font = ImageFont.truetype("assets/font/Arial.ttf", font_size_list[the_index])
@@ -58,7 +59,7 @@ def closest_index(choice_list, centers):
     return min_index
 
 
-def sorting1(list):
+def sorting_coord(list):
 
     centers_with_sums = [(sum(tup), tup) for tup in list]
     sorted_centers_with_sums = sorted(centers_with_sums)
@@ -67,10 +68,31 @@ def sorting1(list):
     return sorted_centers
 
 
-def take_info(np_image):
+def take_info(masks):
     #np_image는 검은 바탕에 흰색 박스들로 이루어진 이미지
-    _, binary_image = cv2.threshold(np_image, 254, 255, cv2.THRESH_BINARY)
-
+    #_, binary_image = cv2.threshold(np_image, 254, 255, cv2.THRESH_BINARY)
+    masks_size = []
+    centers = []
+    angle_list = [] 
+    image = cv2.imread("mask_sum.png")
+    for i in range(masks.shape[0]):
+        _, binary = cv2.threshold(masks[i], 50, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contour = contours[0]
+        if len(contours) > 1:
+            for tmp in contours:
+                if cv2.contourArea(tmp) > cv2.contourArea(contour):
+                    contour = tmp
+        rect = cv2.minAreaRect(contour)
+        center, size, angle = rect
+        centers.append(center) #center is tuple (x, y) 
+        masks_size.append(size) #size is tuple (width, height)
+        angle_list.append(angle)
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+        cv2.drawContours(image, [box], 0, (0, 0, 255), 2)
+    '''
+    수용님 코드
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_image, connectivity=8)
 
     masks_size = []
@@ -81,7 +103,11 @@ def take_info(np_image):
         center_x = int(centroids[i][0])
         center_y = int(centroids[i][1])
         centers.append((center_x, center_y))
-    return (centers,masks_size)
+    '''
+    print(masks_size)
+    print(angle_list)
+    exit()
+    return (centers,masks_size,angle_list)
 
 
 

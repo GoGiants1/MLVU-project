@@ -3,7 +3,7 @@ import os
 import sys
 
 import numpy as np
-from mask_only_tools import draw_centers_with_text, find_white_centers, take_info, sorting1
+from mask_only_tools import draw_centers_with_text, take_info, sorting_coord
 from PIL import Image
 
 
@@ -17,10 +17,13 @@ from hi_sam.text_segmentation import (
 )
 
 
-def gen_mask_only(image, sample_text, choice_list, arg_textseg, arg_maskgen):
+def gen_mask_only(image, sample_text, coordinates, arg_textseg, arg_maskgen):
 
     #input : numpy array
     #sample_text : 그냥 " " 에 감싼 텍스트, 가장 밑 scene_text_image 에 해당 sample_text 만 나옴
+    #coordinates: user가 선택한 editing 좌표
+    #arg_textseg: text segmentation model argument
+    #arg_maskgen: mask generation model argument
 
     """""
 
@@ -42,16 +45,17 @@ def gen_mask_only(image, sample_text, choice_list, arg_textseg, arg_maskgen):
     # mask3_image = Image.fromarray(mask3, "L")
     # save mask3
     # mask3_image.save("mask3.png")
-    print(mask.shape)
     #검정색 글씨 하얀배경
-    masks=mask.squeeze(1)
+    masks=np.array(mask.squeeze(1),dtype=np.uint8)
+    
     #검정색 배경 하얀 mask
-    new_mask=np.array(np.sum(masks,axis=0),dtype=np.uint8)*255
+    mask_sum=np.sum(masks,axis=0)*255
+    masks = masks*255
+    Image.fromarray(mask_sum, "L").save("mask_sum.png")
 
-    centers, font_size_list=take_info(new_mask)
-    centers=sorting1(centers)
+    centers, font_size_list, angle_list = take_info(masks)
+    centers=sorting_coord(centers)
     # 유저 마음대로 x y 좌표를 정하고 그 좌표에 가장 가까운 부분의 scene text 부분만 bear로 바꾸기 , 나머지부분은 stroke 한걸로 하기
-    text_contents=sample_text
-    scene_text_image=draw_centers_with_text(new_mask,centers,text_contents,font_size_list,choice_list,stroke_mask)
+    scene_text_image=draw_centers_with_text(new_mask,centers,sample_text,font_size_list,coordinates,stroke_mask)
 
     return scene_text_image

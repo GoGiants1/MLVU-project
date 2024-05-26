@@ -53,7 +53,7 @@ arg_maskgen = make_text_segmentation_args(
     input_size=(512, 512),
     hier_det=True,
 )
-out = gen_mask_only(input_image, sample_text=sample_text, choice_list=coordinates, arg_textseg=arg_textseg, arg_maskgen=arg_maskgen)
+out = gen_mask_only(input_image, sample_text=sample_text, coordinates=coordinates, arg_textseg=arg_textseg, arg_maskgen=arg_maskgen)
 out.save(f"./assets/examples/text-inpainting/mask_7_out.png") # for debugging
 text_mask_image= cv2.cvtColor(np.array(out), cv2.COLOR_RGB2BGR)
 pipe.scheduler = DDPMScheduler.from_config(pipe.scheduler.config)
