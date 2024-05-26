@@ -4,36 +4,31 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 
-def draw_centers_with_text(mask_sum,centers,text_contents,font_size_list,coordinates,stroke):
+def draw_centers_with_text(masks,centers,text_contents,size_list,coordinates,stroke):
 
     #input_img :numpy array
     #storke: 0-255 1차원 , 검정색 부분이 글자 ,
     #mask: 검정색 배경 하얀색 mask
     #centers: mask들의 중심좌표 
 
-    image0 = np.ones_like(mask_sum)
-    image=Image.fromarray(image0)
-    image=image.convert("L")
-    image=np.array(image)
-
     # text가 있는 영역들이 회색으로 칠해진다.
-    for w in range(image.shape[0]):
-        for h in range(image.shape[1]):
-            if mask[w,h]==1.0:
-                image[w,h]=128.0
-            else:
-                continue
 
-
+    image = np.ones((512,512),dtype=np.uint8)*255 
     image=Image.fromarray(image)
     image=image.convert("L")
     draw = ImageDraw.Draw(image)
-
+    text_len = len(text_contents)
     # choice list내에 있는 좌표와 가장 가까운 scene text 부분만 bear 로 대체가 된다.
-    for chosen in coordinates:
-        the_index=closest_index(choice_list=chosen,centers=centers)
-
-        font = ImageFont.truetype("assets/font/Arial.ttf", font_size_list[the_index])
+    for coord in coordinates:
+        the_index=closest_index(coord,centers)
+        stroke[np.where(masks[the_index]==255)] = 255
+        size_tuple = size_list[the_index]
+        w,h = size_tuple
+        if w >h:
+            size = min(h,w/text_len)
+        else:
+            size = min(w,h/text_len)
+        font = ImageFont.truetype("assets/font/Arial.ttf", size)
         text = text_contents
         _, _, text_width, text_height = font.getbbox(text)
 
@@ -106,13 +101,12 @@ def take_info(masks):
 
 
 
-def fill_gray_with_text(pil_array, numpy_array):
-    pil_array=np.array(pil_array)
+def fill_gray_with_text(mask_array, stroke_array):
     # PIL 이미지 배열과 numpy 배열의 크기가 같은지 확인
-    assert pil_array.shape == numpy_array.shape, "The two arrays must have the same shape"
+    assert mask_array.shape == stroke_array.shape, "The two arrays must have the same shape"
 
     result_array = pil_array.copy()
-    pil_array=filter_pil(pil_array=pil_array)
+    mask_array=filter_pil(mask_array)
     gray_value = 128.0
     black_value = 0.0
 
