@@ -19,15 +19,7 @@ import numpy as np
 import PIL
 import torch
 from huggingface_hub import hf_hub_download
-from model.text_segmenter.unet import UNet
 from packaging import version
-from t_diffusers.callbacks import (
-    MultiPipelineCallbacks,
-    PipelineCallback,
-)
-from t_diffusers.unet_2d_condition import (
-    UNet2DConditionModel,
-)
 
 # use our own UNet2DConditionModel
 from transformers import (
@@ -36,10 +28,9 @@ from transformers import (
     CLIPTokenizer,
     CLIPVisionModelWithProjection,
 )
-from util import filter_segmentation_mask
 
 from diffusers.configuration_utils import FrozenDict
-from diffusers.image_processor import PipelineImageInput, VaeImageProcessor
+from diffusers.image_processor import IPAdapterMaskProcessor, PipelineImageInput, VaeImageProcessor
 from diffusers.loaders import (
     FromSingleFileMixin,
     IPAdapterMixin,
@@ -65,7 +56,16 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 from diffusers.utils.torch_utils import randn_tensor
-from diffusers.image_processor import IPAdapterMaskProcessor
+
+from .model.text_segmenter.unet import UNet
+from .t_diffusers.callbacks import (
+    MultiPipelineCallbacks,
+    PipelineCallback,
+)
+from .t_diffusers.unet_2d_condition import (
+    UNet2DConditionModel,
+)
+from .util import filter_segmentation_mask
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

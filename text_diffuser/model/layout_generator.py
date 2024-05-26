@@ -12,11 +12,11 @@ import warnings
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
-from model.layout_transformer import LayoutTransformer, TextConditioner
 from PIL import Image, ImageDraw, ImageFont
 from termcolor import colored
 from transformers import CLIPTokenizer
-from util import (
+
+from ..util import (
     adjust_font_size,
     adjust_overlap_box,
     alphabet_dic,
@@ -24,6 +24,7 @@ from util import (
     get_width,
     shrink_box,
 )
+from .layout_transformer import LayoutTransformer, TextConditioner
 
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)

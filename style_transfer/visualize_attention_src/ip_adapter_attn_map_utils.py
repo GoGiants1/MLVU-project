@@ -5,6 +5,7 @@ from PIL import Image
 
 
 attn_maps = {}
+ip_attn_maps = {}
 
 
 def hook_fn(name):
@@ -14,7 +15,7 @@ def hook_fn(name):
             del module.processor.attn_map
         if hasattr(module.processor, "ip_attn_map"):
             # dict{inference_step: ip_attn_map_list}
-            attn_maps[name] = module.processor.ip_attn_map
+            ip_attn_maps[name] = module.processor.ip_attn_map
             del module.processor.ip_attn_map
 
     return forward_hook
@@ -56,12 +57,14 @@ def upscale(attn_map, target_size):
     return attn_map
 
 
-def get_net_attn_map(image_size, batch_size=2, instance_or_negative=False, detach=True):
+def get_net_attn_map(image_size, batch_size=1, instance_or_negative=False, detach=True, target_processor="ip_attn"):
 
     idx = 0 if instance_or_negative else 1
     net_attn_maps = []
+    target_attn_map_dict = attn_maps if target_processor == "attn" else ip_attn_maps
 
-    for name, attn_map in attn_maps.items():
+    for name, attn_map in target_attn_map_dict.items():
+        print(name)
         attn_map = attn_map.cpu() if detach else attn_map
         attn_map = torch.chunk(attn_map, batch_size)[idx].squeeze()
         attn_map = upscale(attn_map, image_size)

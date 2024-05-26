@@ -18,6 +18,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import PIL
 import torch
+from pipelines.inverted_ve_pipeline import (
+    ACTIVATE_LAYER_CANDIDATE,
+    CrossFrameAttnProcessor,
+    SharedAttentionProcessor,
+    SharedAttentionProcessor_v2,
+)
 from transformers import (
     CLIPImageProcessor,
     CLIPTextModel,
@@ -58,12 +64,6 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 from diffusers.utils.torch_utils import randn_tensor
-from pipelines.inverted_ve_pipeline import (
-    ACTIVATE_LAYER_CANDIDATE,
-    CrossFrameAttnProcessor,
-    SharedAttentionProcessor,
-    SharedAttentionProcessor_v2,
-)
 
 
 if is_invisible_watermark_available():

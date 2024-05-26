@@ -5,7 +5,6 @@ import numpy as np
 import torch
 from ipycanvas import Canvas
 from PIL import Image
-
 from visualize_attention_src.utils import get_image
 
 

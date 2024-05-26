@@ -7,7 +7,8 @@
 # ------------------------------------------
 import torch
 import torch.nn as nn
-from model.text_segmenter.unet_parts import DoubleConv, Down, OutConv, Up
+
+from .unet_parts import DoubleConv, Down, OutConv, Up
 
 
 class UNet(nn.Module):

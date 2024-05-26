@@ -19,15 +19,7 @@ import cv2
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
-from model.text_segmenter.unet import UNet
 from packaging import version
-from t_diffusers.callbacks import (
-    MultiPipelineCallbacks,
-    PipelineCallback,
-)
-from t_diffusers.unet_2d_condition import (
-    UNet2DConditionModel,
-)
 
 # use our own UNet2DConditionModel
 from transformers import (
@@ -36,7 +28,6 @@ from transformers import (
     CLIPTokenizer,
     CLIPVisionModelWithProjection,
 )
-from util import filter_segmentation_mask
 
 from diffusers.configuration_utils import FrozenDict
 from diffusers.image_processor import IPAdapterMaskProcessor, PipelineImageInput, VaeImageProcessor
@@ -65,6 +56,16 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 from diffusers.utils.torch_utils import randn_tensor
+
+from .model.text_segmenter.unet import UNet
+from .t_diffusers.callbacks import (
+    MultiPipelineCallbacks,
+    PipelineCallback,
+)
+from .t_diffusers.unet_2d_condition import (
+    UNet2DConditionModel,
+)
+from .util import filter_segmentation_mask
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -1164,7 +1165,6 @@ class StableDiffusionPipeline(
         masked_feature = masked_feature * self.vae.config.scaling_factor
 
 
-
         #### Original #####
         '''
         masked_feature = masked_feature * self.vae.config.scaling_factor
@@ -1192,7 +1192,7 @@ class StableDiffusionPipeline(
         image_mask = torch.nn.functional.interpolate(
             image_mask, size=(256, 256), mode="nearest"
         ).repeat(sample_num, 1, 1, 1)
-
+       
         #segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
 
 
@@ -1209,8 +1209,8 @@ class StableDiffusionPipeline(
             else None
         )
         # '' 내부에 들어있는 텍스트 제거(scene_prompt) 및 추출(glyph_text_prompt)
-        
-        
+
+
         if len(prompt.split("'")) > 1:
             scene_prompt = prompt.split("'")[0]
             glyph_text_prompt = prompt.split("'")[1]
@@ -1218,7 +1218,7 @@ class StableDiffusionPipeline(
             scene_prompt = prompt
             glyph_text_prompt = None
 
-        
+
         prompt_embeds, negative_prompt_embeds = self.encode_prompt(
             scene_prompt,
             device,
@@ -1297,10 +1297,10 @@ class StableDiffusionPipeline(
 
         ip_masks = self.ip_mask_processor.preprocess(image_mask, height=height, width=width).to(device=device, dtype=dtype)
         tss_ip_masks = self.ip_mask_processor.preprocess(text_stroke_mask, height=height, width=width).to(device=device, dtype=dtype)
-        
+
         ip_masks = torch.cat([ip_masks, tss_ip_masks], dim=0)
 
-        
+
         if self.cross_attention_kwargs is not None:
             cross_attention_kwargs = self.cross_attention_kwargs.copy()
             cross_attention_kwargs["ip_adapter_masks"] = ip_masks
@@ -1426,8 +1426,8 @@ class StableDiffusionPipeline(
         if not return_dict:
             return (images, has_nsfw_concept)
         # save pred_img
-
-
+        
+        
 
         return StableDiffusionPipelineOutput(
             images=images, nsfw_content_detected=has_nsfw_concept
