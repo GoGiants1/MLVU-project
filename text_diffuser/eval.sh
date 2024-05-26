@@ -1,0 +1,1 @@
+python evaluate.py --mode text-to-image --prompt "signboard with the word 'SLEEPER' written on it in English" --resume_from_checkpoint "textdiffuser-ckpt/diffusion_backbone_1.5/unet" --prompt_list prompt.txt --output_dir sleeper_out --target_images target
