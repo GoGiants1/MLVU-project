@@ -4,14 +4,14 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 
-def draw_centers_with_text(mask,centers,text_contents,font_size_list,coordinates,stroke):
+def draw_centers_with_text(mask_sum,centers,text_contents,font_size_list,coordinates,stroke):
 
     #input_img :numpy array
     #storke: 0-255 1차원 , 검정색 부분이 글자 ,
     #mask: 검정색 배경 하얀색 mask
     #centers: mask들의 중심좌표 
 
-    image0 = np.ones_like(mask)
+    image0 = np.ones_like(mask_sum)
     image=Image.fromarray(image0)
     image=image.convert("L")
     image=np.array(image)
@@ -74,7 +74,6 @@ def take_info(masks):
     masks_size = []
     centers = []
     angle_list = [] 
-    image = cv2.imread("mask_sum.png")
     for i in range(masks.shape[0]):
         _, binary = cv2.threshold(masks[i], 50, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -86,11 +85,10 @@ def take_info(masks):
         rect = cv2.minAreaRect(contour)
         center, size, angle = rect
         centers.append(center) #center is tuple (x, y) 
-        masks_size.append(size) #size is tuple (width, height)
+        masks_size.append((size[1],size[0])) #size is tuple (width, height)
+        if size[1] > size[0]:
+            angle = 90 -angle
         angle_list.append(angle)
-        box = cv2.boxPoints(rect)
-        box = np.int0(box)
-        cv2.drawContours(image, [box], 0, (0, 0, 255), 2)
     '''
     수용님 코드
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_image, connectivity=8)
@@ -104,9 +102,6 @@ def take_info(masks):
         center_y = int(centroids[i][1])
         centers.append((center_x, center_y))
     '''
-    print(masks_size)
-    print(angle_list)
-    exit()
     return (centers,masks_size,angle_list)
 
 

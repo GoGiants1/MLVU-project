@@ -35,7 +35,7 @@ def gen_mask_only(image, sample_text, coordinates, arg_textseg, arg_maskgen):
     amg = load_auto_mask_generator(arg_maskgen)
     sam = load_sam_predictor(args=arg_textseg)
 
-    mask, _ = run_text_detection(amg=amg, image=image)
+    masks, _ = run_text_detection(amg=amg, image=image)
     masked_text_stroke = run_text_stroke_segmentation(sam_detector=sam, image=image, patch_mode=True)
 
     #tss = Image.fromarray(masked_text_stroke)
@@ -46,16 +46,17 @@ def gen_mask_only(image, sample_text, coordinates, arg_textseg, arg_maskgen):
     # save mask3
     # mask3_image.save("mask3.png")
     #검정색 글씨 하얀배경
-    masks=np.array(mask.squeeze(1),dtype=np.uint8)
+    masks=np.array(masks.squeeze(1),dtype=np.uint8)
     
     #검정색 배경 하얀 mask
     mask_sum=np.sum(masks,axis=0)*255
     masks = masks*255
+    
     Image.fromarray(mask_sum, "L").save("mask_sum.png")
 
     centers, font_size_list, angle_list = take_info(masks)
     centers=sorting_coord(centers)
     # 유저 마음대로 x y 좌표를 정하고 그 좌표에 가장 가까운 부분의 scene text 부분만 bear로 바꾸기 , 나머지부분은 stroke 한걸로 하기
-    scene_text_image=draw_centers_with_text(new_mask,centers,sample_text,font_size_list,coordinates,stroke_mask)
+    scene_text_image=draw_centers_with_text(mask_sum,centers,sample_text,font_size_list,coordinates,stroke_mask)
 
     return scene_text_image
