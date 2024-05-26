@@ -6,14 +6,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls, coordinates, stroke):
 
-    #input_img :numpy array
-    #storke: 0-255 1차원 , 검정색 부분이 글자 ,
-    #mask: 검정색 배경 하얀색 mask
-    #centers: mask들의 중심좌표 
+    # storke: (512,512)차원에 각 값은 0-255 1차원. 검정색 부분이 글자
+    # masks: 검정색 배경 하얀색 mask
+    # center_ls: mask들의 중심좌표 
 
-    # text가 있는 영역들이 회색으로 칠해진다.
-    
-    """ 2. 검은색 배경에 흰색 마스크 """
+    """ 1. 검은색 배경에 masks들을 하나하나 그려준다 """
     black_background = np.zeros((512, 512), dtype=np.uint8)
     
     for i in range(masks.shape[0]):
@@ -24,20 +21,24 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
     grey_masks_WB = Image.fromarray(grey_masks_with_white_back, "L")
     Image.fromarray(grey_masks_with_white_back).save("grey_masks_WB.png")
     
-    # choice list내에 있는 좌표와 가장 가까운 scene text 부분만 bear 로 대체가 된다.
+    """ 2. coordinates에서 한 좌표씩 뽑고, 그 좌표와 가장 가까운 scene text 부분만 sample_text로 대체가 된다 """
     for coord in coordinates:
+        # coord와 가장 가까운 mask를 찾고, 해당 인덱스를 리턴
         the_index = closest_index(coord, center_ls)
         
-        # text stroke가 원래는 검정색이다. 그러므로 이걸 흰색으로 바꿔주는 작업.
-        print(f"masks[the_index].shape: {masks[the_index].shape}")
+        # 해당 mask와 겹치는 stroke부분들을 전부 하얀색으로 날려버림
         stroke[np.where(masks[the_index]==255)] = 255 # mask에 해당하는 text stroke를 지워준다
         
-        size_tuple = font_size_ls[the_index]
-        w,h = size_tuple
+        # 해당 mask의 폰트 사이즈를 찾아서, sample_text를 그 폰트 사이즈에 맞게 그림
+        w,h = font_size_ls[the_index]
         font_size = min(w,h)
         
         font = ImageFont.truetype("assets/font/Arial.ttf", font_size)
+        
+        # 해당 폰트 사이즈로 sample_text를 그려서, 그 길이와 높이를 구함
         _, _, text_w, text_h = font.getbbox(sample_text)
+        
+        # 보통 폰트 사이즈가 너무 크기에, 폰트 사이즈를 줄여줌 
         while max(text_w, text_h) > max(w, h):
             font_size -= 1
             font = ImageFont.truetype("assets/font/Arial.ttf", font_size)
@@ -47,9 +48,8 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
         text_image = Image.new('L', (512, 512), 255)
         text_draw = ImageDraw.Draw(text_image)
         text_draw.text(((512-text_w)/2, (512-text_h)/2), sample_text, font=font, fill=0)
-        Image.fromarray(np.array(text_image)).save("text_image.png")
         
-        # 512, 512 이미지 중앙에 마스킹용 텍스트를 그림 (이거 없으면 잘 안되더라구요)
+        # 512, 512 이미지 중앙에 마스킹용 텍스트를 그림 (이거 없으면 잘 안됨. paste에서 쓸 mask를 구하는 과정)
         mask_image = Image.new('L', (512, 512))
         mask_draw = ImageDraw.Draw(mask_image)
         mask_draw.text(((512-text_w)/2, (512-text_h)/2), sample_text, font=font, fill=255)
@@ -57,14 +57,19 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
         # 둘 다 회전. 이미지 중앙을 기준으로 회전한 것이라, 제자리에서 잘 회전합니다.
         mask_rotate = mask_image.rotate(angle_ls[the_index], expand=1)
         text_rotate = text_image.rotate(angle_ls[the_index], expand=1)
-        Image.fromarray(np.array(text_rotate)).save("text_rotate.png")
         
         # 글씨를 이제 paste하는데 center_ls[the_index]가 중심이 되도록 paste한다.
-        print(f"center_ls[the_index]: {center_ls[the_index]}")
-        print(f"center_ls[the_index][0] - 512/2: {center_ls[the_index][0]}")
-        grey_masks_WB.paste(text_rotate, (int(center_ls[the_index][0] - 512/2), int(center_ls[the_index][1] - 512/2)), mask_rotate)
-        grey_masks_WB.save("grey_masks_WB_text.png")
+        
+        # 얼마나 움직여야하는지 아래와 같이 계산. 
+        rotate_x, rotate_y = text_rotate.size
+        
+        new_x = int(center_ls[the_index][0] - rotate_x/2)
+        new_y = int(center_ls[the_index][1] - rotate_y/2)
+        
+        # 글씨 붙여넣기
+        grey_masks_WB.paste(text_rotate, (new_x, new_y), mask_rotate)
     
+    """ 3. 최종 리턴할 그림에서 stroke가 0인 부분은 검은색으로 """
     grey_masks_WB_array = np.array(grey_masks_WB)
     grey_masks_WB_array[np.where(stroke == 0)] = 0
     
@@ -84,7 +89,7 @@ def closest_index(choice, center_ls):
 
     return min_index
 
-
+""" 지금은 일단 안 쓰고 있음
 def sorting_coord(list):
 
     # 중심점들의 합을 기준으로 오름차순 정렬
@@ -93,7 +98,7 @@ def sorting_coord(list):
     sorted_centers = [tup for _, tup in sorted_centers_with_sums]
 
     return sorted_centers
-
+"""
 
 def take_info(masks):
     #np_image는 검은 바탕에 흰색 박스들로 이루어진 이미지
@@ -148,7 +153,7 @@ def take_info(masks):
     return (centers_ls, masks_size_ls, angle_ls)
 
 
-
+""" 지금은 안 쓰고 있음
 def fill_gray_with_text(white_back_GS, stroke_array):
     
     # PIL 이미지 배열과 numpy 배열의 크기가 같은지 확인
@@ -165,8 +170,8 @@ def fill_gray_with_text(white_back_GS, stroke_array):
                 result_array[i, j] = 0.0
 
     return Image.fromarray(result_array)
-
-
+"""
+""" 지금은 안 쓰고 있음
 def filter_pil(pil_array):
 
     image = np.uint8(pil_array)
@@ -186,3 +191,4 @@ def filter_pil(pil_array):
             image[labels == label] = 255
 
     return image
+"""
