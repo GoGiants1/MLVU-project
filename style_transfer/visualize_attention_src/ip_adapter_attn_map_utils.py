@@ -1,29 +1,41 @@
+from collections import defaultdict
 import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
 
 
-attn_maps = {}
-ip_attn_maps = {}
+attn_maps = defaultdict(list)
+ip_attn_maps = defaultdict(list)
 
 
 def hook_fn(name):
     def forward_hook(module, input, output):
-        if hasattr(module.processor, "attn_map"):
-            attn_maps[name] = module.processor.attn_map
-            del module.processor.attn_map
+        # if hasattr(module.processor, "attn_map"):
+        #     # print("hook_fn: ", name, "inference_step: ", module.processor.inference_step)
+        #     print(module.processor.attn_map.shape)
+        #     map = module.processor.attn_map.detach().cpu()
+        #     attn_maps[name].append(map) # 리스트가 아닌 텐서가 들어갈 것임.
+
+        #     del module.processor.attn_map
+            
         if hasattr(module.processor, "ip_attn_map"):
+            print("hook_fn: ", name)
             # dict{inference_step: ip_attn_map_list}
-            ip_attn_maps[name] = module.processor.ip_attn_map
+            maps = [map.detach().cpu() for map in module.processor.ip_attn_map]
+            ip_attn_maps[name].extend(maps) # 리스트가 들어갈 것
+
             del module.processor.ip_attn_map
+            module.processor.ip_attn_map = []
 
     return forward_hook
 
 
 def register_cross_attention_hook(unet):
     for name, module in unet.named_modules():
-        if name.split(".")[-1].startswith("attn"):  # attn2에서 attn으로 변경해둔 상태.
+        # print(name)
+        if name.split(".")[-1].startswith("attn2"):  # attn2에서 attn으로 변경해둔 상태.
+            # print("register hook: ", name)
             module.register_forward_hook(hook_fn(name))
 
     return unet
@@ -56,15 +68,12 @@ def upscale(attn_map, target_size):
     attn_map = torch.softmax(attn_map, dim=0)
     return attn_map
 
-
-def get_net_attn_map(image_size, batch_size=1, instance_or_negative=False, detach=True, target_processor="ip_attn"):
+def get_net_attn_map(image_size, batch_size=2, instance_or_negative=False, detach=True):
 
     idx = 0 if instance_or_negative else 1
     net_attn_maps = []
-    target_attn_map_dict = attn_maps if target_processor == "attn" else ip_attn_maps
 
-    for name, attn_map in target_attn_map_dict.items():
-        print(name)
+    for name, attn_map in attn_maps.items():
         attn_map = attn_map.cpu() if detach else attn_map
         attn_map = torch.chunk(attn_map, batch_size)[idx].squeeze()
         attn_map = upscale(attn_map, image_size)
@@ -73,6 +82,48 @@ def get_net_attn_map(image_size, batch_size=1, instance_or_negative=False, detac
     net_attn_maps = torch.mean(torch.stack(net_attn_maps, dim=0), dim=0)
 
     return net_attn_maps
+
+def get_net_attn_map_per_epochs(image_size, batch_size=1, instance_or_negative=False, detach=True, target_processor="ip_attn"):
+
+    idx = 0 if instance_or_negative else 1
+    net_attn_maps = defaultdict(list)
+    target_attn_map_dict = attn_maps if target_processor == "attn" else ip_attn_maps
+    
+    # print("target_attn_map_dict: ", target_attn_map_dict.keys())
+    if target_processor == "ip_attn":
+        for name, attn_map_dict in target_attn_map_dict.items():
+            if attn_map_dict is None:
+                continue
+            else:
+                attn_map = attn_map_dict # dict{inference_step: ip_attn_map_list}
+            
+            for _, attn_map in attn_map.items():
+                attn_map_1 = attn_map[0].cpu() if detach else attn_map[0]
+                attn_map_2 = attn_map[1].cpu() if detach else attn_map[1]
+                    
+                attn_map_1 = torch.chunk(attn_map_1, batch_size)[idx].squeeze() # chunk의 첫번째가 bbox 마스크, 두번째가 tss 마스크
+                attn_map_2 = torch.chunk(attn_map_2, batch_size)[idx].squeeze() # chunk의 첫번째가 bbox 마스크, 두번째가 tss 마스크
+                upsacled_attn_map_1 = upscale(attn_map_1, image_size)
+                upsacled_attn_map_2 = upscale(attn_map_2, image_size)
+                net_attn_maps[name + "bbox"].append(upsacled_attn_map_1)
+                net_attn_maps[name + "tss"].append(upsacled_attn_map_2)  
+    else:
+        for name, attn_map_dict in target_attn_map_dict.items():
+            if attn_map_dict is None:
+                continue
+            else:
+                attn_map = attn_map_dict # dict{inference_step: ip_attn_map_list}
+            
+            for _, attn_map in attn_map.items():
+                attn_map = attn_map if detach else attn_map[0]
+                    
+                attn_map = torch.chunk(attn_map, batch_size)[idx].squeeze() # chunk의 첫번째가 bbox 마스크, 두번째가 tss 마스크
+                upsacled_attn_map = upscale(attn_map, image_size)
+                net_attn_maps[name].append(upsacled_attn_map)
+
+    net_attn_maps = {key: torch.mean(torch.stack(value, dim=0), dim=0) for key, value in net_attn_maps.items()}
+    return net_attn_maps
+
 
 
 def attnmaps2images(net_attn_maps):

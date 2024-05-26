@@ -558,10 +558,10 @@ class Attention(nn.Module):
         unused_kwargs = [
             k for k, _ in cross_attention_kwargs.items() if k not in attn_parameters
         ]
-        if len(unused_kwargs) > 0:
-            logger.warning(
-                f"cross_attention_kwargs {unused_kwargs} are not expected by {self.processor.__class__.__name__} and will be ignored."
-            )
+        # if len(unused_kwargs) > 0:
+        #     logger.warning(
+        #         f"cross_attention_kwargs {unused_kwargs} are not expected by {self.processor.__class__.__name__} and will be ignored."
+        #     )
         cross_attention_kwargs = {
             k: w for k, w in cross_attention_kwargs.items() if k in attn_parameters
         }
@@ -1407,12 +1407,9 @@ class AttnProcessor2_0:
         *args,
         **kwargs,
     ) -> torch.FloatTensor:
-        if not hasattr(attn, "attn_map"):
-            setattr(attn, "attn_map", {})
-            setattr(attn, "inference_step", 0)
-            setattr(attn, "ip_attn_map", {})
-        else:
-            attn.inference_step += 1
+        if not hasattr(self, "attn_map"):
+            setattr(self, "attn_map", None)
+            setattr(self, "ip_attn_map", [])
 
         if len(args) > 0 or kwargs.get("scale", None) is not None:
             deprecation_message = "The `scale` argument is deprecated and will be ignored. Please remove it, as passing it will raise an error in the future. `scale` should directly be passed while calling the underlying pipeline component i.e., via `cross_attention_kwargs`."
@@ -1478,8 +1475,8 @@ class AttnProcessor2_0:
         )
 
         with torch.no_grad():
-            self.attn_map[self.inference_step] = (
-                (query @ key.transpose(-1, -2).softmax(dim=-1)).clone().cpu().detach()
+            self.attn_map = (
+                (query @ key.transpose(-1, -2).softmax(dim=-1))
             )
 
         hidden_states = hidden_states.transpose(1, 2).reshape(
@@ -2507,12 +2504,10 @@ class IPAdapterAttnProcessor(nn.Module):
         scale: float = 1.0,
         ip_adapter_masks: Optional[torch.FloatTensor] = None,
     ):
-        if not hasattr(attn, "attn_map"):
-            setattr(attn, "attn_map", {})
+        if not hasattr(self, "attn_map"):
+            setattr(self, "attn_map", None)
+            setattr(self, "ip_attn_map", [])
             setattr(attn, "inference_step", 0)
-            setattr(attn, "ip_attn_map", {})
-        else:
-            attn.inference_step += 1
 
         residual = hidden_states
 
@@ -2580,8 +2575,8 @@ class IPAdapterAttnProcessor(nn.Module):
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
 
-        if attn.inference_step in self.attn_map_save_steps:
-            attn.attn_map[attn.inference_step] = attention_probs.clone().cpu().detach()
+        self.attn_map = attention_probs
+        # .clone().detach().cpu()
 
         hidden_states = torch.bmm(attention_probs, value)
         hidden_states = attn.batch_to_head_dim(hidden_states)
@@ -2615,11 +2610,11 @@ class IPAdapterAttnProcessor(nn.Module):
             ip_attention_probs = attn.get_attention_scores(query, ip_key, None)
 
             ####### ADD ATTENTION MAPS #######
-            if attn.inference_step not in attn.ip_attn_map:
-                attn.ip_attn_map[attn.inference_step] = []
-            attn.ip_attn_map[attn.inference_step].append(
-                ip_attention_probs.clone().cpu().detach()
+            
+            self.ip_attn_map.append(
+                ip_attention_probs
             )
+            # .clone().detach().cpu()
             ##################################
 
             current_ip_hidden_states = torch.bmm(ip_attention_probs, ip_value)
@@ -2693,6 +2688,7 @@ class IPAdapterAttnProcessor2_0(torch.nn.Module):
 
         if not isinstance(scale, list):
             scale = [scale] * len(num_tokens)
+            print("num_tokens ", num_tokens)
         if len(scale) != len(num_tokens):
             raise ValueError(
                 "`scale` should be a list of integers with the same length as `num_tokens`."
@@ -2722,10 +2718,10 @@ class IPAdapterAttnProcessor2_0(torch.nn.Module):
         scale: float = 1.0,
         ip_adapter_masks: Optional[torch.FloatTensor] = None,
     ):
-        if not hasattr(attn, "attn_map"):
-            setattr(attn, "attn_map", {})
+        if not hasattr(self, "attn_map"):
+            setattr(self, "attn_map", None)
+            setattr(self, "ip_attn_map", [])
             setattr(attn, "inference_step", 0)
-            setattr(attn, "ip_attn_map", {})
         else:
             attn.inference_step += 1
 
@@ -2810,9 +2806,10 @@ class IPAdapterAttnProcessor2_0(torch.nn.Module):
             query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
         )
         with torch.no_grad():
-            self.attn_map[self.inference_step] = (
-                (query @ key.transpose(-1, -2).softmax(dim=-1)).clone().cpu().detach()
+            self.attn_map = (
+                (query @ key.transpose(-1, -2).softmax(dim=-1))
             )
+            # .clone().detach().cpu()
 
         hidden_states = hidden_states.transpose(1, 2).reshape(
             batch_size, -1, attn.heads * head_dim
@@ -2826,19 +2823,20 @@ class IPAdapterAttnProcessor2_0(torch.nn.Module):
                     " Please use `IPAdapterMaskProcessor` to preprocess your mask"
                 )
             if len(ip_adapter_masks) != len(self.scale):
-                if len(ip_adapter_masks) > len(self.scale):
-                    self.scale = [scale / len(ip_adapter_masks) for _ in range(len(ip_adapter_masks))]
-                else:
-                    raise ValueError(
-                        f"Number of ip_adapter_masks ({len(ip_adapter_masks)}) must match number of IP-Adapters ({len(self.scale)})"
-                    )
+                raise ValueError(
+                    f"Number of ip_adapter_masks ({len(ip_adapter_masks)}) must match number of IP-Adapters ({len(self.scale)})"
+                )
         else:
             ip_adapter_masks = [None] * len(self.scale)
 
         # for ip-adapter
+        cnt = 0
+
         for current_ip_hidden_states, scale, to_k_ip, to_v_ip, mask in zip(
             ip_hidden_states, self.scale, self.to_k_ip, self.to_v_ip, ip_adapter_masks
         ):
+            cnt += 1
+            print("IP Adapter mask num ", cnt)
             ip_key = to_k_ip(current_ip_hidden_states)
             ip_value = to_v_ip(current_ip_hidden_states)
 
@@ -2852,15 +2850,10 @@ class IPAdapterAttnProcessor2_0(torch.nn.Module):
             current_ip_hidden_states = F.scaled_dot_product_attention(
                 query, ip_key, ip_value, attn_mask=None, dropout_p=0.0, is_causal=False
             )
-            if attn.inference_step not in self.ip_attn_map:
-                self.ip_attn_map[attn.inference_step] = []
 
             with torch.no_grad():
-                self.ip_attn_map[self.inference_step].append(
+                self.ip_attn_map.append(
                     (query @ ip_key.transpose(-1, -2).softmax(dim=-1))
-                    .clone()
-                    .cpu()
-                    .detach()
                 )
             current_ip_hidden_states = current_ip_hidden_states.transpose(1, 2).reshape(
                 batch_size, -1, attn.heads * head_dim
