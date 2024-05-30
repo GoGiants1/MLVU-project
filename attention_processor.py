@@ -2688,7 +2688,6 @@ class IPAdapterAttnProcessor2_0(torch.nn.Module):
 
         if not isinstance(scale, list):
             scale = [scale] * len(num_tokens)
-            print("num_tokens ", num_tokens)
         if len(scale) != len(num_tokens):
             raise ValueError(
                 "`scale` should be a list of integers with the same length as `num_tokens`."
