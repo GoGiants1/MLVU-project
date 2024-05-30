@@ -1136,13 +1136,22 @@ class StableDiffusionPipeline(
         img = cv2.resize(img, (width, height), interpolation=cv2.INTER_NEAREST)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         # making the image mask for inpainting ?
-        _, binary = cv2.threshold(
-            gray, 200, 255, cv2.THRESH_BINARY
+        # FIXME: 여기서 th에 따라 image_mask가 바운딩 박스 검은색 일지 tss일지 결정된다.
+        _, binary_tss = cv2.threshold(
+            gray, 50, 255, cv2.THRESH_BINARY
         )  # pixel value is set to 0 or 255 according to the threshold
         # binary => 글자 검은색, 배경 흰색 => 글자 seg 0, 배경 1
         # 1 - binary => 글자 흰색, 배경 검은색 => 글자 seg 1, 배경 0
-        image_mask = binary.astype(np.float32) / 255
+        image_mask = binary_tss.astype(np.float32) / 255
         image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
+
+        # for ip_adapter_mask
+        _, binary_bbox = cv2.threshold(
+            gray, 127, 255, cv2.THRESH_BINARY
+        )
+        image_bbox_masked = binary_bbox.astype(np.float32) / 255
+
+
 
         # 1.2 prepare mask for inpainting
         image = input_image.convert("RGB").resize((width, height))
@@ -1299,11 +1308,10 @@ class StableDiffusionPipeline(
         # text_stroke_mask : 글자 흰색, 나머지 검은색
         # save image_mask, text_stroke_mask
 
-        Image.fromarray((image_mask.squeeze().cpu().numpy() * 255).astype(np.uint8)).save("image_mask.png")
-        Image.fromarray(((text_stroke_mask) * 255).astype(np.uint8)).save("text_stroke_mask.png")
-        masks = [1 - image_mask.squeeze(), torch.Tensor(text_stroke_mask).to(device=device, dtype=dtype)]
+        Image.fromarray((image_bbox_masked * 255).astype(np.uint8)).save("first_ip_mask.png")
+        Image.fromarray((text_stroke_mask).astype(np.uint8)).save("second_ip_mask.png")
+        masks = [image_bbox_masked, text_stroke_mask]
         ip_masks = self.ip_mask_processor.preprocess(masks, height=height, width=width).to(device=device, dtype=dtype)
-
 
         # ip_masks = [ip_masks.reshape(1, ip_masks.shape[0], ip_masks.shape[2], ip_masks.shape[3])]
 
