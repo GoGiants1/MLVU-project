@@ -2610,7 +2610,7 @@ class IPAdapterAttnProcessor(nn.Module):
             ip_attention_probs = attn.get_attention_scores(query, ip_key, None)
 
             ####### ADD ATTENTION MAPS #######
-            
+
             self.ip_attn_map.append(
                 ip_attention_probs
             )

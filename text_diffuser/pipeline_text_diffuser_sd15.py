@@ -1192,7 +1192,7 @@ class StableDiffusionPipeline(
         image_mask = torch.nn.functional.interpolate(
             image_mask, size=(256, 256), mode="nearest"
         ).repeat(sample_num, 1, 1, 1)
-       
+
         #segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
 
 
@@ -1304,7 +1304,7 @@ class StableDiffusionPipeline(
         masks = [1 - image_mask.squeeze(), torch.Tensor(text_stroke_mask).to(device=device, dtype=dtype)]
         ip_masks = self.ip_mask_processor.preprocess(masks, height=height, width=width).to(device=device, dtype=dtype)
 
-        
+
         # ip_masks = [ip_masks.reshape(1, ip_masks.shape[0], ip_masks.shape[2], ip_masks.shape[3])]
 
         if self.cross_attention_kwargs is not None:
@@ -1432,8 +1432,8 @@ class StableDiffusionPipeline(
         if not return_dict:
             return (images, has_nsfw_concept)
         # save pred_img
-        
-        
+
+
 
         return StableDiffusionPipelineOutput(
             images=images, nsfw_content_detected=has_nsfw_concept

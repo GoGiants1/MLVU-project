@@ -1,5 +1,4 @@
 import cv2
-import numpy as np
 import torch
 from generate_mask_only import gen_mask_only
 from PIL import Image
