@@ -227,7 +227,7 @@ def attnmaps2rgbimages(attn_maps: torch.Tensor, source_image: np.ndarray, h: int
         normalized_attn_map = (
             (attn_map - np.min(attn_map)) / (np.max(attn_map) - np.min(attn_map) + 1e-8)
         )
-        normalized_attn_map = 1.0 - normalized_attn_map
+        # normalized_attn_map = 1.0 - normalized_attn_map
 
         heatmap = cv2.applyColorMap(
                 np.uint8(255 * normalized_attn_map), cv2.COLORMAP_JET
