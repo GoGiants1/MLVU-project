@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
+import os
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import cv2
 import numpy as np
 import torch
-import os
 from huggingface_hub import hf_hub_download
 from model.text_segmenter.unet import UNet
 from packaging import version
@@ -39,7 +39,7 @@ from transformers import (
 from util import filter_segmentation_mask
 
 from diffusers.configuration_utils import FrozenDict
-from diffusers.image_processor import PipelineImageInput, VaeImageProcessor
+from diffusers.image_processor import IPAdapterMaskProcessor, PipelineImageInput, VaeImageProcessor
 from diffusers.loaders import (
     FromSingleFileMixin,
     IPAdapterMixin,
@@ -65,8 +65,6 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 from diffusers.utils.torch_utils import randn_tensor
-from PIL import Image
-from diffusers.image_processor import IPAdapterMaskProcessor
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -1126,11 +1124,11 @@ class StableDiffusionPipeline(
             size=(256, 256),  # TODO: Why 256?
             mode="nearest",
         )
-        
+
 
         # 4. Preprocess image
         segmentation_mask = torch.concat([segmentation_mask]*num_images_per_prompt, axis=0)
-        # we don't need this part please check it 
+        # we don't need this part please check it
         img = text_mask_image
         img = cv2.resize(img, (width, height), interpolation=cv2.INTER_NEAREST)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -1160,9 +1158,9 @@ class StableDiffusionPipeline(
             .latent_dist.sample()
             .repeat(sample_num, 1, 1, 1)
         )
-        
+
         masked_feature = masked_feature * self.vae.config.scaling_factor
-    
+
 
 
         #### Original #####
@@ -1192,7 +1190,7 @@ class StableDiffusionPipeline(
         image_mask = torch.nn.functional.interpolate(
             image_mask, size=(256, 256), mode="nearest"
         ).repeat(sample_num, 1, 1, 1)
-       
+
         #segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
 
 
@@ -1220,7 +1218,7 @@ class StableDiffusionPipeline(
             lora_scale=lora_scale,
             clip_skip=self.clip_skip,
         )
-        
+
 
         # For classifier free guidance, we need to do two forward passes.
         # Here we concatenate the unconditional and text embeddings into a single batch
@@ -1408,8 +1406,8 @@ class StableDiffusionPipeline(
         if not return_dict:
             return (images, has_nsfw_concept)
         # save pred_img
-        
-        
+
+
 
         return StableDiffusionPipelineOutput(
             images=images, nsfw_content_detected=has_nsfw_concept

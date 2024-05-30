@@ -3,75 +3,74 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 
-
 def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls, coordinates, stroke):
 
     # storke: (512,512)차원에 각 값은 0-255 1차원. 검정색 부분이 글자
     # masks: 검정색 배경 하얀색 mask
-    # center_ls: mask들의 중심좌표 
+    # center_ls: mask들의 중심좌표
 
     """ 1. 검은색 배경에 masks들을 하나하나 그려준다 """
     black_background = np.zeros((512, 512), dtype=np.uint8)
-    
+
     for i in range(masks.shape[0]):
         black_background[np.where(masks[i] == 255)] = 255
     white_mask_img = black_background
-    
+
     grey_masks_with_white_back = np.array(np.where(white_mask_img == 255, 128, 255), dtype=np.uint8)
     grey_masks_WB = Image.fromarray(grey_masks_with_white_back, "L")
-    
+
     """ 2. coordinates에서 한 좌표씩 뽑고, 그 좌표와 가장 가까운 scene text 부분만 sample_text로 대체가 된다 """
     for coord in coordinates:
         # coord와 가장 가까운 mask를 찾고, 해당 인덱스를 리턴
         the_index = closest_index(coord, center_ls)
-        
+
         # 해당 mask와 겹치는 stroke부분들을 전부 하얀색으로 날려버림
         stroke[np.where(masks[the_index]==255)] = 255 # mask에 해당하는 text stroke를 지워준다
-        
+
         # 해당 mask의 폰트 사이즈를 찾아서, sample_text를 그 폰트 사이즈에 맞게 그림
         w,h = font_size_ls[the_index]
         font_size = min(w,h)
-        
+
         font = ImageFont.truetype("assets/font/Arial.ttf", font_size)
-        
+
         # 해당 폰트 사이즈로 sample_text를 그려서, 그 길이와 높이를 구함
         _, _, text_w, text_h = font.getbbox(sample_text)
-        
-        # 보통 폰트 사이즈가 너무 크기에, 폰트 사이즈를 줄여줌 
+
+        # 보통 폰트 사이즈가 너무 크기에, 폰트 사이즈를 줄여줌
         while max(text_w, text_h) > max(w, h):
             font_size -= 1
             font = ImageFont.truetype("assets/font/Arial.ttf", font_size)
             _, _, text_w, text_h = font.getbbox(sample_text)
-        
+
         # 512, 512 이미지 중앙에 텍스트를 그림
         text_image = Image.new('L', (512, 512), 255)
         text_draw = ImageDraw.Draw(text_image)
         text_draw.text(((512-text_w)/2, (512-text_h)/2), sample_text, font=font, fill=0)
-        
+
         # 512, 512 이미지 중앙에 마스킹용 텍스트를 그림 (이거 없으면 잘 안됨. paste에서 쓸 mask를 구하는 과정)
         mask_image = Image.new('L', (512, 512))
         mask_draw = ImageDraw.Draw(mask_image)
         mask_draw.text(((512-text_w)/2, (512-text_h)/2), sample_text, font=font, fill=255)
-                
+
         # 둘 다 회전. 이미지 중앙을 기준으로 회전한 것이라, 제자리에서 잘 회전합니다.
         mask_rotate = mask_image.rotate(angle_ls[the_index], expand=1)
         text_rotate = text_image.rotate(angle_ls[the_index], expand=1)
-        
+
         # 글씨를 이제 paste하는데 center_ls[the_index]가 중심이 되도록 paste한다.
-        
-        # 얼마나 움직여야하는지 아래와 같이 계산. 
+
+        # 얼마나 움직여야하는지 아래와 같이 계산.
         rotate_x, rotate_y = text_rotate.size
-        
+
         new_x = int(center_ls[the_index][0] - rotate_x/2)
         new_y = int(center_ls[the_index][1] - rotate_y/2)
-        
+
         # 글씨 붙여넣기
         grey_masks_WB.paste(text_rotate, (new_x, new_y), mask_rotate)
-    
+
     """ 3. 최종 리턴할 그림에서 stroke가 0인 부분은 검은색으로 """
     grey_masks_WB_array = np.array(grey_masks_WB)
     grey_masks_WB_array[np.where(stroke == 0)] = 0
-    
+
     return grey_masks_WB_array
 
 def closest_index(choice, center_ls):
@@ -104,26 +103,26 @@ def take_info(masks):
     masks_size_ls = []
     centers_ls = []
     angle_ls = []
-     
+
     for i in range(masks.shape[0]):
         # 픽셀 값이 50보다 작으면 0으로, 50보다 크면 255로 이진화
         _, binary = cv2.threshold(masks[i], 50, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
         # 이진화된 이미지에서 가장 바깥쪽 외곽선을 찾음
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
+
         # 외곽선들이 여러 개 나오는거라, 그 중 첫번째 외곽선을 저장
         contour = contours[0]
-        
+
         # 외곽선들 중 가장 큰 외곽선을 저장하기 위한 for 문
         if len(contours) > 1:
             for tmp in contours:
                 if cv2.contourArea(tmp) > cv2.contourArea(contour):
                     contour = tmp
-                    
+
         # 외곽선을 감싸는 최소 사각형을 구하고, 중심점 사이즈 각도를 저장
         rect = cv2.minAreaRect(contour)
         center, size, angle = rect
-        
+
         # 검은 배경의 이미지를 생성
         mask = np.zeros((512, 512), dtype=np.uint8)
 
@@ -138,11 +137,11 @@ def take_info(masks):
         mask = Image.fromarray(mask)
 
         # PNG 파일로 저장
-        
+
         # 중심점 좌표와 사이즈를 저장
-        centers_ls.append(center) #center is tuple (x, y) 
+        centers_ls.append(center) #center is tuple (x, y)
         masks_size_ls.append((size[0], size[1])) #size is tuple 회전 전혀 안 했을때의 (직사각형의 높이, 직사각형의 너비)
-        
+
         # 사각형의 너비가 높이보다 크면 회전 각도를 조정
         if size[1] > size[0]:
             angle = 90 - angle
