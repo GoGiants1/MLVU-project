@@ -1295,10 +1295,10 @@ class StableDiffusionPipeline(
         masked_feature = torch.cat([masked_feature] * 2, dim=0)
         segmentation_mask = torch.cat([segmentation_mask] * 2, dim=0)
 
-        ip_masks = self.ip_mask_processor.preprocess(image_mask, height=height, width=width).to(device=device, dtype=dtype)
-        tss_ip_masks = self.ip_mask_processor.preprocess(text_stroke_mask, height=height, width=width).to(device=device, dtype=dtype)
-
-        ip_masks = torch.cat([ip_masks, tss_ip_masks], dim=0)
+        # image_mask : 글자 바운딩박스 흰색, 나머지 검은색
+        # text_stroke_mask : 글자 흰색, 나머지 검은색
+        masks = [image_mask, text_stroke_mask]
+        ip_masks = self.ip_mask_processor.preprocess(masks, height=height, width=width).to(device=device, dtype=dtype)
 
 
         if self.cross_attention_kwargs is not None:
