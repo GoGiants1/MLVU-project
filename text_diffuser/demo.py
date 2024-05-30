@@ -1,14 +1,13 @@
 import cv2
 import torch
-from PIL import Image
-from t_diffusers.unet_2d_condition import UNet2DConditionModel
 from generate_mask_only import gen_mask_only
-from t_diffusers.unet_2d_condition import UNet2DConditionModel
-from diffusers import AutoencoderKL, DDPMScheduler
-from diffusers import DDPMScheduler
+from PIL import Image
 from pipeline_text_diffuser_sd15 import StableDiffusionPipeline
+from t_diffusers.unet_2d_condition import UNet2DConditionModel
+
+from diffusers import DDPMScheduler
 from hi_sam.text_segmentation import make_text_segmentation_args
-import numpy as np
+
 
 td_ckpt = "textdiffuser-ckpt/diffusion_backbone_1.5"
 
@@ -38,7 +37,7 @@ input_image = Image.open("assets/examples/text-inpainting/case6.jpg").convert("R
 
 sample_text="Hello"
 # for original_input.jpeg. 110, 500에서 가장 가까운 mask의 글자를 바꾼다.
-coordinates=[[200, 200]] 
+coordinates=[[200, 200]]
 
 arg_textseg = make_text_segmentation_args(
     model_type='vit_l',
@@ -54,7 +53,7 @@ arg_maskgen = make_text_segmentation_args(
     hier_det=True,
 )
 out = gen_mask_only(input_image, sample_text=sample_text, coordinates=coordinates, arg_textseg=arg_textseg, arg_maskgen=arg_maskgen)
-Image.fromarray(out).save(f"./assets/examples/text-inpainting/mask_9_out.png") # for debugging
+Image.fromarray(out).save("./assets/examples/text-inpainting/mask_9_out.png") # for debugging
 text_mask_image= cv2.cvtColor(out, cv2.COLOR_RGB2BGR)
 pipe.scheduler = DDPMScheduler.from_config(pipe.scheduler.config)
 generator = torch.Generator(device="cuda").manual_seed(42)
