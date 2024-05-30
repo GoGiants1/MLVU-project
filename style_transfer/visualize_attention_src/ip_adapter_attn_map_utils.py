@@ -214,10 +214,9 @@ def attnmaps2images(net_attn_maps):
     # print(total_attn_scores)
     return images
 
-def attnmaps2rgbimages(attn_maps: torch.Tensor, source_image: np.ndarray | PIL.Image.Image, h: int = 256, w: int= 256):
-    if not isinstance(source_image, np.ndarray):
-        source_image = np.array(source_image)
+def attnmaps2rgbimages(attn_maps: torch.Tensor, source_image: np.ndarray, h: int = 512, w: int= 512):
     
+    source_image = cv2.resize(source_image, (w, h))
     images = []
 
     for attn_map in attn_maps:
@@ -240,10 +239,12 @@ def attnmaps2rgbimages(attn_maps: torch.Tensor, source_image: np.ndarray | PIL.I
 
         attn_map = cv2.cvtColor(attn_map, cv2.COLOR_GRAY2RGB)
         attn_map = cv2.resize(attn_map, (w, h))
-        
+        print("attn_map: ", attn_map.shape, type(heatmap))
+        print("source_image: ", source_image.shape, type(source_image))
         # merge heatmap and attn_map
         alpha = 0.85
         blended_image = cv2.addWeighted(source_image, 1 - alpha, heatmap, alpha, 0)
+        blended_image = Image.fromarray(blended_image)
         images.append(blended_image)
 
     return images
