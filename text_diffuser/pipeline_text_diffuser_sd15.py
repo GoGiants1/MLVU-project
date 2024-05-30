@@ -1297,9 +1297,15 @@ class StableDiffusionPipeline(
 
         # image_mask : 글자 바운딩박스 흰색, 나머지 검은색
         # text_stroke_mask : 글자 흰색, 나머지 검은색
-        masks = [image_mask, text_stroke_mask]
+        # save image_mask, text_stroke_mask
+
+        Image.fromarray((image_mask.squeeze().cpu().numpy() * 255).astype(np.uint8)).save("image_mask.png")
+        Image.fromarray(((text_stroke_mask) * 255).astype(np.uint8)).save("text_stroke_mask.png")
+        masks = [1 - image_mask.squeeze(), torch.Tensor(text_stroke_mask).to(device=device, dtype=dtype)]
         ip_masks = self.ip_mask_processor.preprocess(masks, height=height, width=width).to(device=device, dtype=dtype)
 
+        
+        # ip_masks = [ip_masks.reshape(1, ip_masks.shape[0], ip_masks.shape[2], ip_masks.shape[3])]
 
         if self.cross_attention_kwargs is not None:
             cross_attention_kwargs = self.cross_attention_kwargs.copy()
