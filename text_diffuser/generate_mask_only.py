@@ -3,7 +3,7 @@ import os
 import sys
 
 import numpy as np
-from mask_only_tools import draw_centers_with_text, take_info, sorting_coord
+from mask_only_tools import draw_centers_with_text, take_info
 from PIL import Image
 
 

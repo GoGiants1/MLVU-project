@@ -1119,11 +1119,14 @@ class StableDiffusionPipeline(
         segmentation_mask: torch.Tensor = self.segmenter(text_mask_tensor)
         segmentation_mask = segmentation_mask.max(1)[1].squeeze(0)
         segmentation_mask = filter_segmentation_mask(segmentation_mask)
+        print(segmentation_mask.shape)
+        Image.fromarray(segmentation_mask.cpu().numpy().astype(np.int8)).convert("RGB").save("segmentation_mask.png")
         segmentation_mask = torch.nn.functional.interpolate(
             segmentation_mask.unsqueeze(0).unsqueeze(0).to(dtype=dtype),
             size=(256, 256),  # TODO: Why 256?
             mode="nearest",
         )
+        
 
         # 4. Preprocess image
         segmentation_mask = torch.concat([segmentation_mask]*num_images_per_prompt, axis=0)
@@ -1133,9 +1136,9 @@ class StableDiffusionPipeline(
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         # making the image mask for inpainting ?
         _, binary = cv2.threshold(
-            gray, 50, 255, cv2.THRESH_BINARY
+            gray, 200, 255, cv2.THRESH_BINARY
         )  # pixel value is set to 0 or 255 according to the threshold
-        image_mask = binary.astype(np.float32) / 255
+        image_mask = binary.astype(np.float32)/255.0
         processor = IPAdapterMaskProcessor()
         masks = processor.preprocess([image_mask], height=512, width=512)
         image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
@@ -1151,7 +1154,7 @@ class StableDiffusionPipeline(
         )
 
 
-        masked_image = image_tensor * image_mask
+        masked_image = image_tensor*image_mask
         masked_feature = (
             self.vae.encode(masked_image)
             .latent_dist.sample()
@@ -1195,9 +1198,9 @@ class StableDiffusionPipeline(
 
         feature_mask = torch.nn.functional.interpolate(
              1-image_mask, size=(64, 64), mode="nearest"
-        ) 
+        )
 
-        #feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
+        feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
 
         # 3. Encode input prompt
         lora_scale = (

@@ -19,7 +19,6 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
     
     grey_masks_with_white_back = np.array(np.where(white_mask_img == 255, 128, 255), dtype=np.uint8)
     grey_masks_WB = Image.fromarray(grey_masks_with_white_back, "L")
-    Image.fromarray(grey_masks_with_white_back).save("grey_masks_WB.png")
     
     """ 2. coordinates에서 한 좌표씩 뽑고, 그 좌표와 가장 가까운 scene text 부분만 sample_text로 대체가 된다 """
     for coord in coordinates:
@@ -73,7 +72,6 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
     grey_masks_WB_array = np.array(grey_masks_WB)
     grey_masks_WB_array[np.where(stroke == 0)] = 0
     
-    Image.fromarray(grey_masks_WB_array).save("grey_masks_WB_stroke.png")
     return grey_masks_WB_array
 
 def closest_index(choice, center_ls):
@@ -140,7 +138,6 @@ def take_info(masks):
         mask = Image.fromarray(mask)
 
         # PNG 파일로 저장
-        mask.save(f"debugging_image/rectangle_{i}.png")
         
         # 중심점 좌표와 사이즈를 저장
         centers_ls.append(center) #center is tuple (x, y) 
