@@ -68,6 +68,7 @@ from diffusers.utils.torch_utils import randn_tensor
 from PIL import Image
 from diffusers.image_processor import IPAdapterMaskProcessor
 
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 EXAMPLE_DOC_STRING = """
@@ -1118,15 +1119,16 @@ class StableDiffusionPipeline(
         segmentation_mask: torch.Tensor = self.segmenter(text_mask_tensor)
         segmentation_mask = segmentation_mask.max(1)[1].squeeze(0)
         segmentation_mask = filter_segmentation_mask(segmentation_mask)
+        print(segmentation_mask.shape)
+        Image.fromarray(segmentation_mask.cpu().numpy().astype(np.int8)).convert("RGB").save("segmentation_mask.png")
         segmentation_mask = torch.nn.functional.interpolate(
             segmentation_mask.unsqueeze(0).unsqueeze(0).to(dtype=dtype),
             size=(256, 256),  # TODO: Why 256?
             mode="nearest",
         )
+        
 
         # 4. Preprocess image
-        preprocessed_image = self.image_processor.preprocess(input_image)
-
         segmentation_mask = torch.concat([segmentation_mask]*num_images_per_prompt, axis=0)
         # we don't need this part please check it 
         img = text_mask_image
@@ -1134,13 +1136,14 @@ class StableDiffusionPipeline(
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         # making the image mask for inpainting ?
         _, binary = cv2.threshold(
-            gray, 50, 255, cv2.THRESH_BINARY
+            gray, 200, 255, cv2.THRESH_BINARY
         )  # pixel value is set to 0 or 255 according to the threshold
-        image_mask = binary.astype(np.float32) / 255
+        image_mask = binary.astype(np.float32)/255.0
         processor = IPAdapterMaskProcessor()
         masks = processor.preprocess([image_mask], height=512, width=512)
         image_mask = torch.from_numpy(image_mask).unsqueeze(0).unsqueeze(0).to(device=device, dtype=dtype)
 
+        # 1.2 prepare mask for inpainting
         image = input_image.convert("RGB").resize((width, height))
         image_tensor = (
             ToTensor()(image)
@@ -1150,15 +1153,17 @@ class StableDiffusionPipeline(
             .to(device=device, dtype=dtype)
         )
 
-        # 1.2 prepare mask for inpainting
-        masked_image = image_tensor * image_mask
+
+        masked_image = image_tensor*image_mask
         masked_feature = (
             self.vae.encode(masked_image)
             .latent_dist.sample()
             .repeat(sample_num, 1, 1, 1)
         )
+        
         masked_feature = masked_feature * self.vae.config.scaling_factor
     
+
 
         #### Original #####
         '''
@@ -1183,17 +1188,17 @@ class StableDiffusionPipeline(
         masked_feature = masked_feature * self.vae.config.scaling_factor
         '''
         # TODO: Hard coded for 256x256
-        '''
+
         image_mask = torch.nn.functional.interpolate(
             image_mask, size=(256, 256), mode="nearest"
         ).repeat(sample_num, 1, 1, 1)
-        '''
        
         #segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
 
+
         feature_mask = torch.nn.functional.interpolate(
              1-image_mask, size=(64, 64), mode="nearest"
-        ) 
+        )
 
         feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
 
@@ -1306,8 +1311,9 @@ class StableDiffusionPipeline(
                     encoder_hidden_states=prompt_embeds,
                     timestep_cond=timestep_cond,
                     added_cond_kwargs=added_cond_kwargs,
-                    attention_mask = None, #image_mask
+                    attention_mask = None, #image_mask,
                     cross_attention_kwargs={"ip_adapter_masks": masks},
+
                     #### ADDED####
                     segmentation_mask=segmentation_mask,
                     feature_mask=feature_mask,
