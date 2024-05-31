@@ -1,7 +1,9 @@
 import os
+
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+
 
 # arial = "Arial.ttf"
 # nanum_gothic_bold = "NanumGothic-Bold.ttf"
@@ -31,7 +33,7 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
         # 해당 mask와 겹치는 stroke부분들을 전부 하얀색으로 날려버림
         bbox_mask = masks[the_index]==255
         stroke[bbox_mask] = 255 # mask에 해당하는 text stroke를 지워준다
-        
+
 
         # 해당 mask의 폰트 사이즈를 찾아서, sample_text를 그 폰트 사이즈에 맞게 그림
         w,h = font_size_ls[the_index]
@@ -39,9 +41,9 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
 
-        
+
         font_path = os.path.join(current_dir, "assets" ,"font", nanum_gothic_xbold)
-        
+
         font = ImageFont.truetype(font_path, font_size)
 
         # 해당 폰트 사이즈로 sample_text를 그려서, 그 길이와 높이를 구함
@@ -52,7 +54,7 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
             font_size -= 1
             font = ImageFont.truetype(font_path, font_size)
             _, _, text_w, text_h = font.getbbox(sample_text)
-        
+
         # 512, 512 이미지 중앙에 텍스트를 그림
         text_image = Image.new('L', (512, 512), 255)
         text_draw = ImageDraw.Draw(text_image)
@@ -77,7 +79,7 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
 
         # 글씨 붙여넣기
         grey_masks_WB.paste(text_rotate, (new_x, new_y), mask_rotate)
-        
+
 
     """ 3. 최종 리턴할 그림에서 stroke가 0인 부분은 검은색으로 """
     grey_masks_WB_array = np.array(grey_masks_WB)
