@@ -2726,7 +2726,7 @@ class IPAdapterAttnProcessor2_0(torch.nn.Module):
 
         residual = hidden_states
         print("In IP Adapter Processor, hidden shape" , hidden_states.shape)
-        
+
         # separate ip_hidden_states from encoder_hidden_states
         if encoder_hidden_states is not None:
             if isinstance(encoder_hidden_states, tuple):

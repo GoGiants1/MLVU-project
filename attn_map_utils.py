@@ -1,5 +1,5 @@
-from collections import defaultdict
 import os
+from collections import defaultdict
 
 import cv2
 import numpy as np
@@ -51,9 +51,9 @@ def upscale(attn_map, target_size):
     temp_size = None
 
     for i in range(0, 5):
-        
+
         scale = 2**i
-        print("scale: ", scale, "attn_map.shape: ",attn_map.shape, 
+        print("scale: ", scale, "attn_map.shape: ",attn_map.shape,
               "temp_w: ", target_size[0] // scale, "temp_h", target_size[1] // scale)
         if (target_size[0] // scale) * (target_size[1] // scale) == attn_map.shape[
             1
@@ -125,14 +125,14 @@ def get_net_attn_map_per_epochs(image_size, batch_size=2, instance_or_negative=F
     idx = 0 if instance_or_negative else 1
     net_attn_maps = defaultdict(list)
     target_attn_map_dict = attn_maps if target_processor == "attn" else ip_attn_maps
-    
+
     # print("target_attn_map_dict: ", target_attn_map_dict.keys())
     if target_processor == "ip_attn":
         for name, attn_map_list in target_attn_map_dict.items():
             print(name)
             if not attn_map_list:
                 continue
-            
+
             for attn_map in attn_map_list:
                 attn_map_1 = attn_map[0].cpu() if detach else attn_map[0]
                 attn_map_2 = attn_map[1].cpu() if detach else attn_map[1]
@@ -143,12 +143,12 @@ def get_net_attn_map_per_epochs(image_size, batch_size=2, instance_or_negative=F
                 upsacled_attn_map_1 = upscale(attn_map_1, image_size)
                 upsacled_attn_map_2 = upscale(attn_map_2, image_size)
                 net_attn_maps[name + "bbox"].append(upsacled_attn_map_1)
-                net_attn_maps[name + "tss"].append(upsacled_attn_map_2)  
+                net_attn_maps[name + "tss"].append(upsacled_attn_map_2)
     else:
         for name, attn_map_list in target_attn_map_dict.items():
             if attn_map_list is None:
                 continue
-            
+
             for attn_map in attn_map_list:
                 attn_map = attn_map.cpu() if detach else attn_map
                 attn_map = torch.chunk(attn_map, batch_size)[idx].squeeze() # chunk의 첫번째가 bbox 마스크, 두번째가 tss 마스크
@@ -238,7 +238,7 @@ def prompt2tokens(tokenizer, prompt):
 def save_net_attn_maps(net_attn_maps, dir_name, tokenizer, prompt):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    
+
     tokens = prompt2tokens(tokenizer, prompt)
     total_attn_scores = 0
     for i, (token, attn_map) in enumerate(zip(tokens, net_attn_maps)):

@@ -325,7 +325,7 @@ class StableDiffusionPipeline(
         else:
             segmenter = UNet(3, 96, True)
             target_device = [torch.device("cpu")]
-        
+
         self.segmenter = torch.nn.DataParallel(segmenter, device_ids=target_device)
         self.segmenter.load_state_dict(torch.load(character_segmenter_path))
         self.segmenter.eval()
@@ -1121,7 +1121,7 @@ class StableDiffusionPipeline(
                 .div_(0.5)
                 .to(device=device, dtype=dtype)
             )
-        
+
         segmentation_mask: torch.Tensor = self.segmenter(text_mask_tensor).to(device=device, dtype=dtype)
         segmentation_mask = segmentation_mask.max(1)[1].squeeze(0)
         segmentation_mask = filter_segmentation_mask(segmentation_mask)
@@ -1206,12 +1206,12 @@ class StableDiffusionPipeline(
 
         #segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
 
-        # 원본 
+        # 원본
         # feature_mask = torch.nn.functional.interpolate(
         #     1- image_mask, size=(64, 64), mode="nearest"
         # )
 
-        # # 수정본 
+        # # 수정본
         # feature_mask = torch.nn.functional.interpolate(
         #     image_mask, size=(64, 64), mode="nearest"
         # )
@@ -1317,7 +1317,7 @@ class StableDiffusionPipeline(
 
         # Image.fromarray((binary_bbox).astype(np.uint8)).save("first_ip_mask.png")
         Image.fromarray((binary_tss).astype(np.uint8)).save("second_ip_mask.png")
-        # masks = [binary_bbox, binary_tss] 
+        # masks = [binary_bbox, binary_tss]
         masks = [binary_tss, 255 - binary_tss] # 0: background, 1: text style
         ip_masks = self.ip_mask_processor.preprocess(masks, height=height, width=width).to(device=device, dtype=dtype)
 
