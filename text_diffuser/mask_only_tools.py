@@ -3,7 +3,9 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-
+# arial = "Arial.ttf"
+# nanum_gothic_bold = "NanumGothic-Bold.ttf"
+nanum_gothic_xbold = "NanumGothic-ExtraBold.ttf"
 def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls, coordinates, stroke):
 
     # storke: (512,512)차원에 각 값은 0-255 1차원. 검정색 부분이 글자
@@ -28,7 +30,6 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
 
         # 해당 mask와 겹치는 stroke부분들을 전부 하얀색으로 날려버림
         bbox_mask = masks[the_index]==255
-        
         stroke[bbox_mask] = 255 # mask에 해당하는 text stroke를 지워준다
         
 
@@ -38,7 +39,8 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
 
-        font_path = os.path.join(current_dir, "assets/font/Arial.ttf")
+        
+        font_path = os.path.join(current_dir, "assets" ,"font", nanum_gothic_xbold)
         
         font = ImageFont.truetype(font_path, font_size)
 
@@ -76,37 +78,12 @@ def draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls
         # 글씨 붙여넣기
         grey_masks_WB.paste(text_rotate, (new_x, new_y), mask_rotate)
         
-        # 새로 생성한 text stroke 붙여넣기
-        rot_text_arr = np.array(text_rotate)
-        rot_mask_arr = np.array(mask_rotate)
-
-        rot_text_arr = np.where(rot_mask_arr == 0, 255, rot_text_arr)
-
-        # 새 이미지 배열 생성 (크기도 512, 512)
-        new_rot_text_arr = np.zeros((img_w, img_h), dtype=np.uint8) + 255
-
-
-        # 패딩을 계산 (주의: 여기서는 오른쪽과 아래쪽 패딩만 계산)
-        pad_right = img_w - (new_x + img_w)
-        pad_bottom = img_h - (new_y + img_h)
-
-        new_rot_text_arr = np.pad(rot_text_arr, ((new_y, max(0, pad_bottom)), (new_x, max(0, pad_right))), 'constant', constant_values=255)
-
-        new_rot_text_arr = new_rot_text_arr[:img_w, :img_h]
-
-        Image.fromarray(new_rot_text_arr).save("rot_text.png")
-
-        # stroke를 붙여넣기
-        stroke = np.where(new_rot_text_arr < 255, 0, stroke)
-
-        Image.fromarray(stroke).save("new_stroke.png")
-        
 
     """ 3. 최종 리턴할 그림에서 stroke가 0인 부분은 검은색으로 """
     grey_masks_WB_array = np.array(grey_masks_WB)
     grey_masks_WB_array[np.where(stroke == 0)] = 0
 
-    return grey_masks_WB_array, stroke
+    return grey_masks_WB_array
 
 def closest_index(choice, center_ls):
     min_distance = float('inf')

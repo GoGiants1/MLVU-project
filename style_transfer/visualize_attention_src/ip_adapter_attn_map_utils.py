@@ -24,8 +24,8 @@ def hook_fn(name):
         if hasattr(module.processor, "ip_attn_map"):
             print("hook_fn: ", name)
             # dict{inference_step: ip_attn_map_list}
-            maps = [map.detach().cpu() for map in module.processor.ip_attn_map]
-            ip_attn_maps[name].extend(maps) # 리스트가 들어갈 것
+            # downsample 해서 메모리 관리하기 현재 맵 차원 ()
+            ip_attn_maps[name].extend(module.processor.ip_attn_map) # 리스트가 들어갈 것
 
             del module.processor.ip_attn_map
             module.processor.ip_attn_map = []
@@ -45,33 +45,42 @@ def register_cross_attention_hook(unet):
 
 def upscale(attn_map, target_size):
     attn_map = torch.mean(attn_map, dim=0) # (C, W, H) -> (W, H)
+    print("attn_map.shape after mean op: ", attn_map.shape)
     attn_map = attn_map.permute(1, 0) # (W, H) -> (H, W)
     temp_size = None
 
     for i in range(0, 5):
+        
         scale = 2**i
+        print("scale: ", scale, "attn_map.shape: ",attn_map.shape, 
+              "temp_w: ", target_size[0] // scale, "temp_h", target_size[1] // scale)
         if (target_size[0] // scale) * (target_size[1] // scale) == attn_map.shape[
             1
         ] * 64:
             temp_size = (target_size[0] // (scale * 8), target_size[1] // (scale * 8))
             break
+    if temp_size is None:
+        # target size가 작을 경우 대응
+        temp_size = [1, 1 * target_size[1] // target_size[0]]
 
-    assert temp_size is not None, "temp_size cannot is None"
+        while temp_size[0] * temp_size[1] < attn_map.shape[1]:
+            temp_size = (temp_size[0] * 2, temp_size[1] * 2)
+
 
     attn_map = attn_map.view(attn_map.shape[0], *temp_size) # (H, W) -> (C, W, H)
-
     attn_map = F.interpolate(
         attn_map.unsqueeze(0).to(dtype=torch.float32),
         size=target_size,
         mode="bilinear",
         align_corners=False,
-    )[0]
+    ).squeeze()
+    print("reshaped attn_map.shape: ", attn_map.shape)
 
     attn_map = torch.softmax(attn_map, dim=0)
     return attn_map
 
 def upscale_maps(attn_maps, target_size):
-    # attn_maps = attn_maps.permute(1, 0)
+    attn_maps = attn_maps.permute(1, 0)
     temp_size = None
 
     for i in range(0, 5):
@@ -192,7 +201,7 @@ def get_attn_maps_per_epochs(image_size, batch_size=2, instance_or_negative=Fals
     net_attn_maps = {key: torch.mean(torch.stack(value, dim=0), dim=0) for key, value in net_attn_maps.items()}
     return net_attn_maps
 
-def attnmaps2images(net_attn_maps):
+def attnmaps2images(net_attn_maps, w=512, h=512):
 
     # total_attn_scores = 0
     images = []
@@ -206,6 +215,8 @@ def attnmaps2images(net_attn_maps):
         )
         normalized_attn_map = normalized_attn_map.astype(np.uint8)
         # print("norm: ", normalized_attn_map.shape)
+        # resize to 512, 512
+        normalized_attn_map = cv2.resize(normalized_attn_map, (w, h), interpolation=cv2.INTER_LANCZOS4)
         image = Image.fromarray(normalized_attn_map)
 
         # image = fix_save_attn_map(attn_map)
@@ -232,7 +243,7 @@ def attnmaps2rgbimages(attn_maps: torch.Tensor, source_image: np.ndarray, h: int
         heatmap = cv2.applyColorMap(
                 np.uint8(255 * normalized_attn_map), cv2.COLORMAP_JET
         )
-        heatmap = cv2.resize(heatmap, (w, h))
+        heatmap = cv2.resize(heatmap, (w, h), interpolation=cv2.INTER_LANCZOS4)
 
         attn_map = normalized_attn_map * 255
         attn_map = attn_map.astype(np.uint8)

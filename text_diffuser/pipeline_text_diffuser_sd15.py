@@ -315,12 +315,18 @@ class StableDiffusionPipeline(
             new_config["sample_size"] = 64
             unet._internal_dict = FrozenDict(new_config)
 
-        print("Downloading text_segmenter.pth...")
+        print("Check text_segmenter.pth...")
         character_segmenter_path = hf_hub_download(
             "GoGiants1/td-unet15", "text_segmenter.pth", repo_type="model"
         )
-        segmenter = UNet(3, 96, True).cuda()
-        self.segmenter = torch.nn.DataParallel(segmenter)
+        if torch.cuda.is_available():
+            segmenter = UNet(3, 96, True).cuda(0)
+            target_device = [torch.device("cuda:0")]
+        else:
+            segmenter = UNet(3, 96, True)
+            target_device = [torch.device("cpu")]
+        
+        self.segmenter = torch.nn.DataParallel(segmenter, device_ids=target_device)
         self.segmenter.load_state_dict(torch.load(character_segmenter_path))
         self.segmenter.eval()
         self.register_modules(
@@ -913,7 +919,6 @@ class StableDiffusionPipeline(
         self,
         input_image: PipelineImageInput,
         text_mask_image: PipelineImageInput,
-        text_stroke_mask: Optional[PipelineImageInput] = None,
         prompt: Union[str, List[str]] = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
@@ -1116,12 +1121,12 @@ class StableDiffusionPipeline(
                 .div_(0.5)
                 .to(device=device, dtype=dtype)
             )
-
-        segmentation_mask: torch.Tensor = self.segmenter(text_mask_tensor)
+        
+        segmentation_mask: torch.Tensor = self.segmenter(text_mask_tensor).to(device=device, dtype=dtype)
         segmentation_mask = segmentation_mask.max(1)[1].squeeze(0)
         segmentation_mask = filter_segmentation_mask(segmentation_mask)
         print(segmentation_mask.shape)
-        Image.fromarray(segmentation_mask.cpu().numpy().astype(np.int8)).convert("RGB").save("segmentation_mask.png")
+        Image.fromarray(segmentation_mask.clone().detach().cpu().numpy().astype(np.int8)).convert("RGB").save("segmentation_mask.png")
         segmentation_mask = torch.nn.functional.interpolate(
             segmentation_mask.unsqueeze(0).unsqueeze(0).to(dtype=dtype),
             size=(256, 256),  # TODO: Why 256?
@@ -1130,7 +1135,7 @@ class StableDiffusionPipeline(
 
 
         # 4. Preprocess image
-        segmentation_mask = torch.concat([segmentation_mask]*num_images_per_prompt, axis=0)
+        segmentation_mask = torch.concat([segmentation_mask] * sample_num, axis=0)
         # we don't need this part please check it
         img = text_mask_image
         img = cv2.resize(img, (width, height), interpolation=cv2.INTER_NEAREST)
@@ -1149,7 +1154,6 @@ class StableDiffusionPipeline(
         _, binary_bbox = cv2.threshold(
             gray, 127, 255, cv2.THRESH_BINARY
         )
-        image_bbox_masked = binary_bbox.astype(np.float32) / 255
 
 
 
@@ -1163,26 +1167,24 @@ class StableDiffusionPipeline(
             .to(device=device, dtype=dtype)
         )
 
+        #### For Inpainting!! ####
+        # masked_image = image_tensor * image_mask # 원본
 
-        masked_image = image_tensor*image_mask
-        masked_feature = (
-            self.vae.encode(masked_image)
-            .latent_dist.sample()
-            .repeat(sample_num, 1, 1, 1)
-        )
-
-        masked_feature = masked_feature * self.vae.config.scaling_factor
-
+        # # masked_image = image_tensor * 1 - image_mask # 수정본
+        # masked_feature = (
+        #     self.vae.encode(masked_image)
+        #     .latent_dist.sample()
+        #     .repeat(sample_num, 1, 1, 1)
+        # )
+        # masked_feature = masked_feature * self.vae.config.scaling_factor
+        ##########################
 
         #### Original #####
-        '''
-        masked_feature = masked_feature * self.vae.config.scaling_factor
         masked_image = torch.zeros(sample_num, 3, 512, 512).to(
             "cuda"
         )  # (b, 3, 512, 512)
         masked_feature = self.vae.encode(masked_image).latent_dist.sample()  # (b, 4, 64, 64)
         masked_feature = masked_feature * self.vae.config.scaling_factor
-        '''
 
         #####################
 
@@ -1204,12 +1206,17 @@ class StableDiffusionPipeline(
 
         #segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
 
+        # 원본 
+        # feature_mask = torch.nn.functional.interpolate(
+        #     1- image_mask, size=(64, 64), mode="nearest"
+        # )
 
-        feature_mask = torch.nn.functional.interpolate(
-             1-image_mask, size=(64, 64), mode="nearest"
-        )
+        # # 수정본 
+        # feature_mask = torch.nn.functional.interpolate(
+        #     image_mask, size=(64, 64), mode="nearest"
+        # )
 
-        # feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
+        feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
 
         # 3. Encode input prompt
         lora_scale = (
@@ -1300,17 +1307,18 @@ class StableDiffusionPipeline(
         self._num_timesteps = len(timesteps)
 
 
-        feature_mask = torch.cat([feature_mask] * 2, dim=0)
-        masked_feature = torch.cat([masked_feature] * 2, dim=0)
-        segmentation_mask = torch.cat([segmentation_mask] * 2, dim=0)
+        feature_mask = torch.cat([feature_mask] * 2, dim=0) # before cat, (b, 1, 64, 64) => after cat, (2b, 1, 64, 64)
+        masked_feature = torch.cat([masked_feature] * 2, dim=0) # before cat, (b, 4, 64, 64) => after cat, (2b, 4, 64, 64)
+        segmentation_mask = torch.cat([segmentation_mask] * 2, dim=0) # before cat, (b, 1, 256, 256) => after cat, (2b, 1, 256, 256)
 
         # image_mask : 글자 바운딩박스 흰색, 나머지 검은색
         # text_stroke_mask : 글자 흰색, 나머지 검은색
         # save image_mask, text_stroke_mask
 
-        Image.fromarray((image_bbox_masked * 255).astype(np.uint8)).save("first_ip_mask.png")
-        Image.fromarray((text_stroke_mask).astype(np.uint8)).save("second_ip_mask.png")
-        masks = [image_bbox_masked, text_stroke_mask]
+        # Image.fromarray((binary_bbox).astype(np.uint8)).save("first_ip_mask.png")
+        Image.fromarray((binary_tss).astype(np.uint8)).save("second_ip_mask.png")
+        # masks = [binary_bbox, binary_tss] 
+        masks = [binary_tss, 255 - binary_tss] # 0: background, 1: text style
         ip_masks = self.ip_mask_processor.preprocess(masks, height=height, width=width).to(device=device, dtype=dtype)
 
         # ip_masks = [ip_masks.reshape(1, ip_masks.shape[0], ip_masks.shape[2], ip_masks.shape[3])]
@@ -1419,6 +1427,7 @@ class StableDiffusionPipeline(
 
         # Offload all models
         self.maybe_free_model_hooks()
+        self.segmenter.to("cpu")
         if save_output:
             os.makedirs(f"{output_dir}", exist_ok=True)
             os.makedirs(f"{output_dir}/{prompt}", exist_ok=True)

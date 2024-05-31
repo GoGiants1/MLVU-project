@@ -43,30 +43,6 @@ def gen_mask_only(image, sample_text, coordinates, arg_textseg, arg_maskgen):
     # font_size_list: (마스크의 너비, 마스크의 높이)
 
     """ 4. 유저 마음대로 x y 좌표를 정하고(coordinates) 그 좌표에 가장 가까운 부분의 mask 부분만 bear로 바꾸기. 나머지부분은 text stroke 유지 """
-    scene_text_image, _ = draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls, coordinates, stroke_mask)
+    scene_text_image = draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls, coordinates, stroke_mask)
 
     return scene_text_image
-
-
-def gen_bbox_mask_and_text_stroke_mask(image, sample_text, coordinates, arg_textseg, arg_maskgen):
-    amg = load_auto_mask_generator(arg_maskgen)
-    sam = load_sam_predictor(args=arg_textseg)
-
-    masks, _ = run_text_detection(amg=amg, image=image)
-    masked_text_stroke = run_text_stroke_segmentation(sam_detector=sam, image=image, patch_mode=True)
-
-    """ 1. 흰색 배경에 검은색 text stroke 생성 """
-    stroke_mask = np.array(np.where(masked_text_stroke == True, 0, 255), dtype=np.uint8)
-
-    """ 2. 검은색 배경에 흰색 마스크들을 그룹으로 가져온다. 예를 들어 마스크가 34개 있으면 masks의 최종 차원은 (34, 512, 512) """
-    masks = np.array(masks.squeeze(1),dtype=np.uint8)
-    masks = masks*255
-
-    """ 3. 각 mask의 중심좌표, 폰트 사이즈, 각도 정보 추출 by 가장 큰 contour, 해당 contour에서 가장 작은 직사각형 생성 """
-    center_ls, font_size_ls, angle_ls = take_info(masks)
-    # font_size_list: (마스크의 너비, 마스크의 높이)
-
-    """ 4. 유저 마음대로 x y 좌표를 정하고(coordinates) 그 좌표에 가장 가까운 부분의 mask 부분만 bear로 바꾸기. 나머지부분은 text stroke 유지 """
-    scene_text_image, edited_stroke = draw_centers_with_text(masks, center_ls, angle_ls, sample_text, font_size_ls, coordinates, stroke_mask)
-
-    return scene_text_image, edited_stroke

@@ -256,7 +256,7 @@ class UNet2DConditionModel(
         )
         # output.shape = (batchsize, 8, 64, 64)
 
-        self.sample_size = sample_size  # ?
+        self.sample_size = sample_size  # 64
 
         if num_attention_heads is not None:
             raise ValueError(
@@ -1294,7 +1294,12 @@ class UNet2DConditionModel(
             attention_mask = attention_mask.unsqueeze(1)
 
         # 0. concat all the feature together (Seg mask, masked feature.)
-        sample = torch.cat([sample, feature_mask, masked_feature], dim=1)
+        # sample => input latent => (2b, 4, 512 // 8, 64)
+        # feature_mask = torch.cat([feature_mask] * 2, dim=0) # before cat, (b, 1, 64, 64) => after cat, (2b, 1, 64, 64)
+        # masked_feature = torch.cat([masked_feature] * 2, dim=0) # before cat, (b, 4, 64, 64) => after cat, (2b, 4, 64, 64)
+        # segmentation_mask = torch.cat([segmentation_mask] * 2, dim=0) # before cat, (b, 1, 256, 256) => after cat, (2b, 1, 256, 256)
+
+        sample = torch.cat([sample, feature_mask, masked_feature], dim=1) # shape: (2b, 4 + 1 + 4, 64, 64)
         # convert encoder_attention_mask to a bias the same way we do for attention_mask
         if encoder_attention_mask is not None:
             encoder_attention_mask = (
@@ -1347,8 +1352,8 @@ class UNet2DConditionModel(
         )  # get 8-d embedding from character-level segmentation mask, with 128 indices
         segmentation_mask_embedding = self.segmap_conv(
             segmentation_mask_embedding
-        )  # resize the mask using cnn to match the feature space
-        sample = torch.cat([sample, segmentation_mask_embedding], 1)
+        )  # resize the mask using cnn to match the feature space (batchsize, 8, 64, 64)
+        sample = torch.cat([sample, segmentation_mask_embedding], 1) # shape: (2b, 4 + 1 + 4 (sample) + 8(segmap feature), 64, 64)
 
         sample = self.conv_in(sample)
 
