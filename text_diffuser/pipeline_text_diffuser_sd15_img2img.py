@@ -19,15 +19,7 @@ import numpy as np
 import PIL
 import torch
 from huggingface_hub import hf_hub_download
-from model.text_segmenter.unet import UNet
 from packaging import version
-from t_diffusers.callbacks import (
-    MultiPipelineCallbacks,
-    PipelineCallback,
-)
-from t_diffusers.unet_2d_condition import (
-    UNet2DConditionModel,
-)
 
 # use our own UNet2DConditionModel
 from transformers import (
@@ -36,10 +28,9 @@ from transformers import (
     CLIPTokenizer,
     CLIPVisionModelWithProjection,
 )
-from util import filter_segmentation_mask
 
 from diffusers.configuration_utils import FrozenDict
-from diffusers.image_processor import PipelineImageInput, VaeImageProcessor
+from diffusers.image_processor import IPAdapterMaskProcessor, PipelineImageInput, VaeImageProcessor
 from diffusers.loaders import (
     FromSingleFileMixin,
     IPAdapterMixin,
@@ -65,6 +56,16 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 from diffusers.utils.torch_utils import randn_tensor
+
+from .model.text_segmenter.unet import UNet
+from .t_diffusers.callbacks import (
+    MultiPipelineCallbacks,
+    PipelineCallback,
+)
+from .t_diffusers.unet_2d_condition import (
+    UNet2DConditionModel,
+)
+from .util import filter_segmentation_mask
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -1235,16 +1236,18 @@ class StableDiffusionPipeline(
         )
 
         # 4. Preprocess image
-        preprocessed_image = self.image_processor.preprocess(input_image)
+        preprocessed_image = self.image_processor.preprocess(input_image, height=height, width=width)
 
         img = text_mask_image
         img = cv2.resize(img, (width, height), interpolation=cv2.INTER_NEAREST)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         # making the image mask for inpainting ?
         _, binary = cv2.threshold(
-            gray, 250, 255, cv2.THRESH_BINARY
+            gray, 50, 255, cv2.THRESH_BINARY
         )  # pixel value is set to 0 or 255 according to the threshold
-        image_mask = 1 - (binary.astype(np.float32) / 255)
+        # binary => 글자 검은색, 배경 흰색 => 글자 seg 0, 배경 1
+        # 1 - binary => 글자 흰색, 배경 검은색 => 글자 seg 1, 배경 0
+        image_mask = binary.astype(np.float32) / 255
         image_mask = (
             torch.from_numpy(image_mask)
             .unsqueeze(0)
@@ -1262,33 +1265,14 @@ class StableDiffusionPipeline(
         )
 
         # 1.2 prepare mask for inpainting
-
-        masked_image = image_tensor * (1 - image_mask)
+        masked_image = image_tensor * image_mask
         masked_feature = (
             self.vae.encode(masked_image)
             .latent_dist.sample()
             .repeat(sample_num, 1, 1, 1)
         )
-
-        #### Original #####
-        # masked_feature = masked_feature * vae.config.scaling_factor
-        # masked_image = torch.zeros(sample_num, 3, 512, 512).to(
-        #     "cuda"
-        # )  # (b, 3, 512, 512)
-        # masked_feature = vae.encode(masked_image).latent_dist.sample()  # (b, 4, 64, 64)
-        # masked_feature = masked_feature * vae.config.scaling_factor
-
-        #####################
-
-        ##### Background #####
-
-        masked_image = torch.zeros(sample_num, 3, width, height).to(
-            device
-        )  # (b, 3, 512, 512)
-        masked_feature = self.vae.encode(
-            masked_image
-        ).latent_dist.sample()  # (b, 4, 64, 64)
         masked_feature = masked_feature * self.vae.config.scaling_factor
+
 
         # TODO: Hard coded for 256x256
         image_mask = torch.nn.functional.interpolate(
@@ -1297,11 +1281,10 @@ class StableDiffusionPipeline(
 
         segmentation_mask = segmentation_mask * image_mask  # (b, 1, 512, 512)
 
-        # feature_mask = torch.nn.functional.interpolate(
-        #     image_mask, size=(64, 64), mode="nearest"
-        # ) # 원본
+        feature_mask = torch.nn.functional.interpolate(
+            1 - image_mask, size=(64, 64), mode="nearest"
+        ) # 원본
 
-        feature_mask = torch.ones(sample_num, 1, 64, 64).to(device)  # (b, 1, 64, 64)
 
         # 3. Encode input prompt
         lora_scale = (
@@ -1349,18 +1332,9 @@ class StableDiffusionPipeline(
         # 5. Prepare latent variables
         # num_channels_latents = self.unet.config.in_channels ## 원본
         num_channels_latents = 4
-        # latents = self.prepare_latents(
-        #     batch_size * num_images_per_prompt,
-        #     4,  # FIXME: Hardcoded...
-        #     height,
-        #     width,
-        #     prompt_embeds.dtype,
-        #     device,
-        #     generator,
-        #     latents,
-        # )
+
         latents = self.prepare_latents_with_image(
-            image,
+            preprocessed_image,
             latent_timestep,
             batch_size,
             num_images_per_prompt,
@@ -1393,14 +1367,14 @@ class StableDiffusionPipeline(
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
 
-        print("latent shape", latents.shape)
-        print("prompt_embeds shape or enc hidden state", prompt_embeds.shape)
-        print("feature_mask shape", feature_mask.shape)
-        print("masked_feature shape", masked_feature.shape)
-        print("segmentation_mask shape", segmentation_mask.shape)
         feature_mask = torch.cat([feature_mask] * 2, dim=0)
         masked_feature = torch.cat([masked_feature] * 2, dim=0)
         segmentation_mask = torch.cat([segmentation_mask] * 2, dim=0)
+
+        processor = IPAdapterMaskProcessor()
+        ip_masks = processor.preprocess([image_mask], height=height, width=width)
+
+
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 if self.interrupt:
@@ -1423,7 +1397,7 @@ class StableDiffusionPipeline(
                     t,
                     encoder_hidden_states=prompt_embeds,
                     timestep_cond=timestep_cond,
-                    cross_attention_kwargs=self.cross_attention_kwargs,
+                    cross_attention_kwargs={"ip_adapter_masks": ip_masks},
                     added_cond_kwargs=added_cond_kwargs,
                     #### ADDED####
                     segmentation_mask=segmentation_mask,

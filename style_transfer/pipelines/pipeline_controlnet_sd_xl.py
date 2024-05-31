@@ -64,13 +64,14 @@ if is_invisible_watermark_available():
 
 import os
 
-from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
 from pipelines.inverted_ve_pipeline import (
     ACTIVATE_LAYER_CANDIDATE,
     CrossFrameAttnProcessor,
     SharedAttentionProcessor,
     SharedAttentionProcessor_v2,
 )
+
+from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

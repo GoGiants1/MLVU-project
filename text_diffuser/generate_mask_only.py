@@ -1,12 +1,4 @@
-#pretrained_checkpoint 안에 hi_sam_h.pth 넣으시오
-import os
-import sys
-
 import numpy as np
-from mask_only_tools import draw_centers_with_text, take_info
-
-
-sys.path.append(os.path.dirname(os.path.abspath(os.getcwd())))
 
 from hi_sam.text_segmentation import (
     load_auto_mask_generator,
@@ -14,6 +6,8 @@ from hi_sam.text_segmentation import (
     run_text_detection,
     run_text_stroke_segmentation,
 )
+
+from .mask_only_tools import draw_centers_with_text, take_info
 
 
 def gen_mask_only(image, sample_text, coordinates, arg_textseg, arg_maskgen):

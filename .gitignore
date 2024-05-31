@@ -5,4 +5,5 @@
 text_diffuser/textdiffuser-ckpt/*
 text_diffuser/output/*
 text_diffuser/assets/*
+*.ipynb_checkpoints/*
 
