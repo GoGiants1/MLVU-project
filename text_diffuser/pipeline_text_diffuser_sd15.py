@@ -1319,6 +1319,7 @@ class StableDiffusionPipeline(
         Image.fromarray((binary_tss).astype(np.uint8)).save("second_ip_mask.png")
         # masks = [binary_bbox, binary_tss]
         masks = [binary_tss, 255 - binary_tss] # 0: background, 1: text style
+        # masks = [binary_tss] # 0: background
         ip_masks = self.ip_mask_processor.preprocess(masks, height=height, width=width).to(device=device, dtype=dtype)
 
         # ip_masks = [ip_masks.reshape(1, ip_masks.shape[0], ip_masks.shape[2], ip_masks.shape[3])]
