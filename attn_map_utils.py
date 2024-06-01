@@ -208,7 +208,10 @@ def attnmaps2images(net_attn_maps, w=512, h=512):
 
 
 def attnmaps2rgbimages(
-    attn_maps: torch.Tensor, source_image: np.ndarray, h: int = 512, w: int = 512
+    attn_maps: torch.Tensor,
+    source_image: np.ndarray,
+    h: int = 512,
+    w: int = 512,
 ):
 
     source_image = cv2.resize(source_image, (w, h))
@@ -229,20 +232,67 @@ def attnmaps2rgbimages(
         )
         heatmap = cv2.resize(heatmap, (w, h), interpolation=cv2.INTER_LANCZOS4)
 
-        attn_map = normalized_attn_map * 255
-        attn_map = attn_map.astype(np.uint8)
-
-        attn_map = cv2.cvtColor(attn_map, cv2.COLOR_GRAY2RGB)
-        attn_map = cv2.resize(attn_map, (w, h))
-        # print("attn_map: ", attn_map.shape, type(heatmap))
-        # print("source_image: ", source_image.shape, type(source_image))
-        # merge heatmap and attn_map
         alpha = 0.85
         blended_image = cv2.addWeighted(source_image, 1 - alpha, heatmap, alpha, 0)
         blended_image = Image.fromarray(blended_image)
         images.append(blended_image)
 
     return images
+
+
+def save_attn_heat_maps_with_prompt(
+    attn_maps: torch.Tensor,
+    source_image: np.ndarray,
+    tokenizer,
+    prompt,
+    dir_name: str,
+    h: int = 512,
+    w: int = 512,
+):
+
+    source_image = cv2.resize(source_image, (w, h))
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+
+    normalized_source_image = np.float32(
+        (source_image - np.min(source_image))
+        / (np.max(source_image) - np.min(source_image) + 1e-8)
+    )
+
+    tokens = prompt2tokens(tokenizer, prompt)
+    total_attn_scores = 0
+    for i, (token, attn_map) in enumerate(zip(tokens, attn_maps)):
+        attn_map_score = torch.sum(attn_map)
+        attn_map = attn_map.cpu().numpy()
+        attn_map_w, attn_map_h = attn_map.shape
+        attn_map_total = attn_map_w * attn_map_h
+        attn_map_score = attn_map_score / attn_map_total
+        total_attn_scores += attn_map_score
+        token = token.replace("</w>", "")
+
+        normalized_attn_map = (attn_map - np.min(attn_map)) / (
+            np.max(attn_map) - np.min(attn_map) + 1e-8
+        )
+
+        heatmap = cv2.applyColorMap(
+            np.uint8(255 * normalized_attn_map), cv2.COLORMAP_JET
+        )
+        heatmap = cv2.resize(heatmap, (w, h), interpolation=cv2.INTER_LANCZOS4)
+
+        heatmap = np.float32(heatmap) / 255
+
+        blended = heatmap + normalized_source_image
+
+        blended = blended / np.max(blended)
+
+        vis = np.uint8(255 * blended)
+        vis = cv2.cvtColor(vis, cv2.COLOR_RGB2BGR)
+
+        save_attn_map(
+            vis,
+            f"{token}:{attn_map_score:.2f}",
+            f"{dir_name}/{i}_<{token}>:{int(attn_map_score*100)}.png",
+        )
 
 
 def prompt2tokens(tokenizer, prompt):
