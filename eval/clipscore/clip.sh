@@ -1,0 +1,1 @@
+python clipscore.py --candidates_json example/good_captions.json --image_dir example/images 
