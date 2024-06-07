@@ -1121,12 +1121,13 @@ class StableDiffusionPipeline(
                 .div_(0.5)
                 .to(device=device, dtype=dtype)
             )
-
+        self.segmenter = self.segmenter.to(device=device, dtype=dtype)
+        self.segmenter.eval()
         segmentation_mask: torch.Tensor = self.segmenter(text_mask_tensor).to(device=device, dtype=dtype)
         segmentation_mask = segmentation_mask.max(1)[1].squeeze(0)
         segmentation_mask = filter_segmentation_mask(segmentation_mask)
-        print(segmentation_mask.shape)
-        Image.fromarray(segmentation_mask.clone().detach().cpu().numpy().astype(np.int8)).convert("RGB").save("segmentation_mask.png")
+        # print(segmentation_mask.shape)
+        # Image.fromarray(segmentation_mask.clone().detach().cpu().numpy().astype(np.int8)).convert("RGB").save("segmentation_mask.png")
         segmentation_mask = torch.nn.functional.interpolate(
             segmentation_mask.unsqueeze(0).unsqueeze(0).to(dtype=dtype),
             size=(256, 256),  # TODO: Why 256?
