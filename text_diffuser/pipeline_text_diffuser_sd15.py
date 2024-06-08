@@ -1127,7 +1127,7 @@ class StableDiffusionPipeline(
         segmentation_mask = segmentation_mask.max(1)[1].squeeze(0)
         segmentation_mask = filter_segmentation_mask(segmentation_mask)
         # print(segmentation_mask.shape)
-        # Image.fromarray(segmentation_mask.clone().detach().cpu().numpy().astype(np.int8)).convert("RGB").save("segmentation_mask.png")
+        Image.fromarray(segmentation_mask.clone().detach().cpu().numpy().astype(np.int8)).convert("RGB").save("segmentation_mask.png")
         segmentation_mask = torch.nn.functional.interpolate(
             segmentation_mask.unsqueeze(0).unsqueeze(0).to(dtype=dtype),
             size=(256, 256),  # TODO: Why 256?
@@ -1325,11 +1325,14 @@ class StableDiffusionPipeline(
 
         # ip_masks = [ip_masks.reshape(1, ip_masks.shape[0], ip_masks.shape[2], ip_masks.shape[3])]
 
+        cross_attention_kwargs = None
         if self.cross_attention_kwargs is not None:
             cross_attention_kwargs = self.cross_attention_kwargs.copy()
-            cross_attention_kwargs["ip_adapter_masks"] = ip_masks
+            if ip_adapter_image is not None and len(ip_adapter_image) > 1:
+                cross_attention_kwargs["ip_adapter_masks"] = ip_masks
         else:
-            cross_attention_kwargs = {"ip_adapter_masks": ip_masks}
+            if ip_adapter_image is not None and len(ip_adapter_image) > 1:
+                cross_attention_kwargs = {"ip_adapter_masks": ip_masks}
 
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
