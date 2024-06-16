@@ -18,7 +18,7 @@ def hook_fn(name):
             # print("hook_fn: ", name, "inference_step: ", module.processor.inference_step)
             print(module.processor.attn_map.shape)
             map = module.processor.attn_map.detach().cpu()
-            attn_maps[name].append(map) # 리스트가 아닌 텐서가 들어갈 것임.
+            attn_maps[name].append(map)  # 리스트가 아닌 텐서가 들어갈 것임.
 
             del module.processor.attn_map
 
@@ -26,7 +26,9 @@ def hook_fn(name):
             print("hook_fn: ", name)
             # dict{inference_step: ip_attn_map_list}
             # downsample 해서 메모리 관리하기 현재 맵 차원 ()
-            ip_attn_maps[name].extend(module.processor.ip_attn_map) # 리스트가 들어갈 것
+            ip_attn_maps[name].extend(
+                module.processor.ip_attn_map
+            )  # 리스트가 들어갈 것
 
             del module.processor.ip_attn_map
             module.processor.ip_attn_map = []
@@ -45,16 +47,24 @@ def register_cross_attention_hook(unet):
 
 
 def upscale(attn_map, target_size):
-    attn_map = torch.mean(attn_map, dim=0) # (C, W, H) -> (W, H)
+    attn_map = torch.mean(attn_map, dim=0)  # (C, W, H) -> (W, H)
     print("attn_map.shape after mean op: ", attn_map.shape)
-    attn_map = attn_map.permute(1, 0) # (W, H) -> (H, W)
+    attn_map = attn_map.permute(1, 0)  # (W, H) -> (H, W)
     temp_size = None
 
     for i in range(0, 5):
 
         scale = 2**i
-        print("scale: ", scale, "attn_map.shape: ",attn_map.shape,
-              "temp_w: ", target_size[0] // scale, "temp_h", target_size[1] // scale)
+        print(
+            "scale: ",
+            scale,
+            "attn_map.shape: ",
+            attn_map.shape,
+            "temp_w: ",
+            target_size[0] // scale,
+            "temp_h",
+            target_size[1] // scale,
+        )
         if (target_size[0] // scale) * (target_size[1] // scale) == attn_map.shape[
             1
         ] * 64:
@@ -67,8 +77,7 @@ def upscale(attn_map, target_size):
         while temp_size[0] * temp_size[1] < attn_map.shape[1]:
             temp_size = (temp_size[0] * 2, temp_size[1] * 2)
 
-
-    attn_map = attn_map.view(attn_map.shape[0], *temp_size) # (H, W) -> (C, W, H)
+    attn_map = attn_map.view(attn_map.shape[0], *temp_size)  # (H, W) -> (C, W, H)
     attn_map = F.interpolate(
         attn_map.unsqueeze(0).to(dtype=torch.float32),
         size=target_size,
@@ -79,6 +88,7 @@ def upscale(attn_map, target_size):
 
     attn_map = torch.softmax(attn_map, dim=0)
     return attn_map
+
 
 def upscale_maps(attn_maps, target_size):
     attn_maps = attn_maps.permute(1, 0)
@@ -105,7 +115,6 @@ def upscale_maps(attn_maps, target_size):
     return attn_maps
 
 
-
 def get_net_attn_map(image_size, batch_size=2, instance_or_negative=False, detach=True):
     idx = 0 if instance_or_negative else 1
     net_attn_maps = []
@@ -120,7 +129,14 @@ def get_net_attn_map(image_size, batch_size=2, instance_or_negative=False, detac
 
     return net_attn_maps
 
-def get_net_attn_map_per_epochs(image_size, batch_size=2, instance_or_negative=False, detach=True, target_processor="ip_attn"):
+
+def get_net_attn_map_per_epochs(
+    image_size,
+    batch_size=2,
+    instance_or_negative=False,
+    detach=True,
+    target_processor="ip_attn",
+):
 
     idx = 0 if instance_or_negative else 1
     net_attn_maps = defaultdict(list)
@@ -151,11 +167,16 @@ def get_net_attn_map_per_epochs(image_size, batch_size=2, instance_or_negative=F
 
             for attn_map in attn_map_list:
                 attn_map = attn_map.cpu() if detach else attn_map
-                attn_map = torch.chunk(attn_map, batch_size)[idx].squeeze() # chunk의 첫번째가 bbox 마스크, 두번째가 tss 마스크
+                attn_map = torch.chunk(attn_map, batch_size)[
+                    idx
+                ].squeeze()  # chunk의 첫번째가 bbox 마스크, 두번째가 tss 마스크
                 upsacled_attn_map = upscale(attn_map, image_size)
                 net_attn_maps[name].append(upsacled_attn_map)
 
-    net_attn_maps = {key: torch.mean(torch.stack(value, dim=0), dim=0) for key, value in net_attn_maps.items()}
+    net_attn_maps = {
+        key: torch.mean(torch.stack(value, dim=0), dim=0)
+        for key, value in net_attn_maps.items()
+    }
     return net_attn_maps
 
 
@@ -174,7 +195,9 @@ def attnmaps2images(net_attn_maps, w=512, h=512):
         normalized_attn_map = normalized_attn_map.astype(np.uint8)
         # print("norm: ", normalized_attn_map.shape)
         # resize to 512, 512
-        normalized_attn_map = cv2.resize(normalized_attn_map, (w, h), interpolation=cv2.INTER_LANCZOS4)
+        normalized_attn_map = cv2.resize(
+            normalized_attn_map, (w, h), interpolation=cv2.INTER_LANCZOS4
+        )
         image = Image.fromarray(normalized_attn_map)
 
         # image = fix_save_attn_map(attn_map)
@@ -183,7 +206,13 @@ def attnmaps2images(net_attn_maps, w=512, h=512):
     # print(total_attn_scores)
     return images
 
-def attnmaps2rgbimages(attn_maps: torch.Tensor, source_image: np.ndarray, h: int = 512, w: int= 512):
+
+def attnmaps2rgbimages(
+    attn_maps: torch.Tensor,
+    source_image: np.ndarray,
+    h: int = 512,
+    w: int = 512,
+):
 
     source_image = cv2.resize(source_image, (w, h))
     images = []
@@ -193,30 +222,78 @@ def attnmaps2rgbimages(attn_maps: torch.Tensor, source_image: np.ndarray, h: int
         attn_map = attn_map.cpu().numpy()
         # total_attn_scores += attn_map.mean().item()
 
-        normalized_attn_map = (
-            (attn_map - np.min(attn_map)) / (np.max(attn_map) - np.min(attn_map) + 1e-8)
+        normalized_attn_map = (attn_map - np.min(attn_map)) / (
+            np.max(attn_map) - np.min(attn_map) + 1e-8
         )
-        # normalized_attn_map = 1.0 - normalized_attn_map
+        normalized_attn_map = 1.0 - normalized_attn_map
 
         heatmap = cv2.applyColorMap(
-                np.uint8(255 * normalized_attn_map), cv2.COLORMAP_JET
+            np.uint8(255 * normalized_attn_map), cv2.COLORMAP_JET
         )
         heatmap = cv2.resize(heatmap, (w, h), interpolation=cv2.INTER_LANCZOS4)
 
-        attn_map = normalized_attn_map * 255
-        attn_map = attn_map.astype(np.uint8)
-
-        attn_map = cv2.cvtColor(attn_map, cv2.COLOR_GRAY2RGB)
-        attn_map = cv2.resize(attn_map, (w, h))
-        # print("attn_map: ", attn_map.shape, type(heatmap))
-        # print("source_image: ", source_image.shape, type(source_image))
-        # merge heatmap and attn_map
         alpha = 0.85
         blended_image = cv2.addWeighted(source_image, 1 - alpha, heatmap, alpha, 0)
         blended_image = Image.fromarray(blended_image)
         images.append(blended_image)
 
     return images
+
+
+def save_attn_heat_maps_with_prompt(
+    attn_maps: torch.Tensor,
+    source_image: np.ndarray,
+    tokenizer,
+    prompt,
+    dir_name: str,
+    h: int = 512,
+    w: int = 512,
+):
+
+    source_image = cv2.resize(source_image, (w, h))
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+
+    normalized_source_image = np.float32(
+        (source_image - np.min(source_image))
+        / (np.max(source_image) - np.min(source_image) + 1e-8)
+    )
+
+    tokens = prompt2tokens(tokenizer, prompt)
+    total_attn_scores = 0
+    for i, (token, attn_map) in enumerate(zip(tokens, attn_maps)):
+        attn_map_score = torch.sum(attn_map)
+        attn_map = attn_map.cpu().numpy()
+        attn_map_w, attn_map_h = attn_map.shape
+        attn_map_total = attn_map_w * attn_map_h
+        attn_map_score = attn_map_score / attn_map_total
+        total_attn_scores += attn_map_score
+        token = token.replace("</w>", "")
+
+        normalized_attn_map = (attn_map - np.min(attn_map)) / (
+            np.max(attn_map) - np.min(attn_map) + 1e-8
+        )
+
+        heatmap = cv2.applyColorMap(
+            np.uint8(255 * normalized_attn_map), cv2.COLORMAP_JET
+        )
+        heatmap = cv2.resize(heatmap, (w, h), interpolation=cv2.INTER_LANCZOS4)
+
+        heatmap = np.float32(heatmap) / 255
+
+        blended = heatmap + normalized_source_image
+
+        blended = blended / np.max(blended)
+
+        vis = np.uint8(255 * blended)
+        vis = cv2.cvtColor(vis, cv2.COLOR_RGB2BGR)
+
+        save_attn_map(
+            vis,
+            f"{token}:{attn_map_score:.2f}",
+            f"{dir_name}/{i}_<{token}>:{int(attn_map_score*100)}_heatmap.png",
+        )
+
 
 def prompt2tokens(tokenizer, prompt):
     text_inputs = tokenizer(
@@ -234,7 +311,6 @@ def prompt2tokens(tokenizer, prompt):
     return tokens
 
 
-
 def save_net_attn_maps(net_attn_maps, dir_name, tokenizer, prompt):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
@@ -244,34 +320,38 @@ def save_net_attn_maps(net_attn_maps, dir_name, tokenizer, prompt):
     for i, (token, attn_map) in enumerate(zip(tokens, net_attn_maps)):
         attn_map_score = torch.sum(attn_map)
         attn_map = attn_map.cpu().numpy()
-        h,w = attn_map.shape
-        attn_map_total = h*w
+        h, w = attn_map.shape
+        attn_map_total = h * w
         attn_map_score = attn_map_score / attn_map_total
         total_attn_scores += attn_map_score
-        token = token.replace('</w>','')
+        token = token.replace("</w>", "")
         save_attn_map(
             attn_map,
-            f'{token}:{attn_map_score:.2f}',
-            f"{dir_name}/{i}_<{token}>:{int(attn_map_score*100)}.png"
+            f"{token}:{attn_map_score:.2f}",
+            f"{dir_name}/{i}_<{token}>:{int(attn_map_score*100)}.png",
         )
-    print(f'total_attn_scores: {total_attn_scores}')
+    print(f"total_attn_scores: {total_attn_scores}")
 
 
 def resize_net_attn_map(net_attn_maps, target_size):
     net_attn_maps = F.interpolate(
         net_attn_maps.to(dtype=torch.float32).unsqueeze(0),
         size=target_size,
-        mode='bilinear',
-        align_corners=False
-    ).squeeze() # (77,64,64)
+        mode="bilinear",
+        align_corners=False,
+    ).squeeze()  # (77,64,64)
     return net_attn_maps
 
 
 def save_attn_map(attn_map, title, save_path):
-    normalized_attn_map = (attn_map - np.min(attn_map)) / (np.max(attn_map) - np.min(attn_map) + 1e-8) * 255
+    normalized_attn_map = (
+        (attn_map - np.min(attn_map))
+        / (np.max(attn_map) - np.min(attn_map) + 1e-8)
+        * 255
+    )
     normalized_attn_map = normalized_attn_map.astype(np.uint8)
     image = Image.fromarray(normalized_attn_map)
-    image.save(save_path, format='PNG', compression=0)
+    image.save(save_path, format="PNG", compression=0)
 
 
 def return_net_attn_map(net_attn_maps, tokenizer, prompt):
@@ -280,20 +360,23 @@ def return_net_attn_map(net_attn_maps, tokenizer, prompt):
     images = []
     for i, (token, attn_map) in enumerate(zip(tokens, net_attn_maps)):
         attn_map_score = torch.sum(attn_map)
-        h,w = attn_map.shape
-        attn_map_total = h*w
+        h, w = attn_map.shape
+        attn_map_total = h * w
         attn_map_score = attn_map_score / attn_map_total
         total_attn_scores += attn_map_score
 
         attn_map = attn_map.cpu().numpy()
-        normalized_attn_map = (attn_map - np.min(attn_map)) / (np.max(attn_map) - np.min(attn_map)) * 255
+        normalized_attn_map = (
+            (attn_map - np.min(attn_map)) / (np.max(attn_map) - np.min(attn_map)) * 255
+        )
         normalized_attn_map = normalized_attn_map.astype(np.uint8)
         image = Image.fromarray(normalized_attn_map)
 
-        token = token.replace('</w>','')
-        images.append((image,f"{i}_<{token}>"))
-    print(f'total_attn_scores: {total_attn_scores}')
+        token = token.replace("</w>", "")
+        images.append((image, f"{i}_<{token}>"))
+    print(f"total_attn_scores: {total_attn_scores}")
     return images
+
 
 def is_torch2_available():
     return hasattr(F, "scaled_dot_product_attention")
